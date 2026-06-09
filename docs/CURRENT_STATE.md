@@ -14,7 +14,7 @@ Werkt: React/Vite app-shell met sidebar, topbar, globale zoekinput, projecttabs 
 
 Validatie & foutafhandeling: inputvalidatie is **gecentraliseerd** in `server/src/modules/validate.js` (`validateBody`/`validateForm`-middleware op zod-basis) en toegepast op de write-endpoints van vrijwel alle modules. Gevalideerde waarden worden gecoërceerd en teruggemerged op `req.body`, terwijl onbekende velden en de PUT-diff-checks intact blijven; schema's vermijden `.default()` zodat handler-fallbacks blijven werken. Elke API-fout deelt één envelope `{ error, details? }`. De globale error-handler in `server/src/index.js` mapt `ZodError` → 400 met `details`, multer `LIMIT_FILE_SIZE` → 413 en respecteert `err.status`.
 
-Getest: `npm test` draait util-, API-integratie-, validatie-, auth-/RBAC- én back-uptests. Totaal **22 tests** (3 util + 5 API + 5 validate + 7 auth + 2 backup). `npm run build` is de release-build-check.
+Getest: `npm test` draait util-, API-integratie-, validatie-, auth-/RBAC-, back-up- én flow-tests. Totaal **28 tests** (3 util + 5 API + 5 validate + 7 auth + 2 backup + 6 flows). De flow-tests (`flows.test.js`) dekken budget marge/btw-berekening, de portaal-goedkeuringsflow (incl. client-safe lekbescherming), soft-delete, optimistic concurrency (409), product-pricing/CSV en de AI lokale-fallback. `npm run build` is de release-build-check.
 
 Live staat: Docker/Tailscale-config met app-service op poort 4000 en loopback smoke endpoint op 127.0.0.1:4100. Runtime-status niet geverifieerd in deze run.
 
@@ -211,7 +211,7 @@ Live staat: nog geen back-ups gemaakt op de live instance.
 - **AI draait alleen live tegen Anthropic als `ANTHROPIC_API_KEY` is gezet** én AI is ingeschakeld; anders een eerlijk lokaal concept. Geen andere providers geïmplementeerd.
 - **E-mailnotificaties zijn gescaffold**: portaalreacties zetten een rij in `notifications` met `sent = 0`. Er wordt niets daadwerkelijk verstuurd (geen SMTP/provider).
 - **Validatie is nu gecentraliseerd** via `validate.js` en toegepast op de write-endpoints van vrijwel alle modules; alle API-fouten delen het envelope `{ error, details? }`. `projects` en `auth` gebruiken nog eigen inline zod-schema's (`safeParse`) i.p.v. de gedeelde middleware, maar leveren hetzelfde foutcontract.
-- **Testdekking is smal**: util- + kern-API-integratietests; geen frontend-/e2e-/PDF-visual-tests.
+- **Testdekking groeit, maar mist nog frontend/e2e**: backend-kernflows zijn nu gedekt (28 tests: API, validatie, auth/RBAC, back-up, budget/portal/concurrency/CSV/AI). Nog geen React-component-/e2e-/PDF-visual-tests.
 - **Geen pagination/filtering-standaard** op de lijst-endpoints (datasets zijn nog klein).
 
 ## Hoogste Prioriteiten (nu het meest waardevol)
