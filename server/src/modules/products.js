@@ -1,0 +1,469 @@
+const express = require("express");
+const { db } = require("../db/database");
+const { id } = require("./utils");
+const { upload, removeUpload } = require("./uploads");
+
+const router = express.Router();
+
+// margin = sale_price - purchase_price, but only when both are > 0.
+function computeMargin(salePrice, purchasePrice) {
+  const sale = Number(salePrice || 0);
+  const purchase = Number(purchasePrice || 0);
+  return (sale > 0 && purchase > 0) ? sale - purchase : 0;
+}
+
+// Quote a single CSV cell: wrap in quotes and double inner quotes when it
+// contains a comma, quote, or newline. Keeps numbers/plain text untouched.
+function csvCell(value) {
+  const str = value === null || value === undefined ? "" : String(value);
+  if (/[",\r\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+// Minimal CSV parser: comma-separated, optional double-quoted fields with
+// doubled-quote escaping. Returns an array of string arrays (rows of cells).
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  const src = String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') { field += '"'; i += 1; }
+        else inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  row.push(field);
+  rows.push(row);
+  // Drop fully-empty lines (e.g. trailing newline).
+  return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+}
+
+router.get("/", (_req, res) => {
+  res.json(db.prepare(`
+    SELECT p.*, alt.name AS alternative_to_name,
+      EXISTS(SELECT 1 FROM product_favorites f WHERE f.product_id = p.id) AS is_favorite
+    FROM products p
+    LEFT JOIN products alt ON alt.id = p.alternative_to_id
+    ORDER BY p.updated_at DESC, p.name
+  `).all());
+});
+
+router.post("/", upload.single("image"), (req, res) => {
+  const productId = id("product");
+  const salePrice = Number(req.body.sale_price || 0);
+  const purchasePrice = Number(req.body.purchase_price || 0);
+  db.prepare(`
+    INSERT INTO products (id, name, brand, supplier, category, collection, sku, dimensions, lead_time, designer, alternative_to_id, image_path, price, webshop_url, description, notes, tags, status, supplier_id, parent_product_id, purchase_price, sale_price, margin, vat_rate, availability_status, price_date)
+    VALUES (@id, @name, @brand, @supplier, @category, @collection, @sku, @dimensions, @lead_time, @designer, @alternative_to_id, @image_path, @price, @webshop_url, @description, @notes, @tags, @status, @supplier_id, @parent_product_id, @purchase_price, @sale_price, @margin, @vat_rate, @availability_status, @price_date)
+  `).run({
+    id: productId,
+    name: req.body.name || "Nieuw product",
+    brand: req.body.brand || "",
+    supplier: req.body.supplier || "",
+    category: req.body.category || "",
+    collection: req.body.collection || "",
+    sku: req.body.sku || "",
+    dimensions: req.body.dimensions || "",
+    lead_time: req.body.lead_time || "",
+    designer: req.body.designer || "",
+    alternative_to_id: req.body.alternative_to_id || null,
+    image_path: req.file?.path || "",
+    price: Number(req.body.price || 0),
+    webshop_url: req.body.webshop_url || "",
+    description: req.body.description || "",
+    notes: req.body.notes || "",
+    tags: req.body.tags || "",
+    status: req.body.status || "candidate",
+    supplier_id: req.body.supplier_id || null,
+    parent_product_id: req.body.parent_product_id || null,
+    purchase_price: purchasePrice,
+    sale_price: salePrice,
+    margin: computeMargin(salePrice, purchasePrice),
+    vat_rate: Number(req.body.vat_rate ?? 21),
+    availability_status: req.body.availability_status || "unknown",
+    price_date: req.body.price_date || ""
+  });
+  res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(productId));
+});
+
+router.put("/:id", upload.single("image"), (req, res) => {
+  const current = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+  if (!current) return res.status(404).json({ error: "Product niet gevonden" });
+  const salePrice = Number(req.body.sale_price ?? current.sale_price ?? 0);
+  const purchasePrice = Number(req.body.purchase_price ?? current.purchase_price ?? 0);
+  db.prepare(`
+    UPDATE products SET
+      name = @name,
+      brand = @brand,
+      supplier = @supplier,
+      category = @category,
+      collection = @collection,
+      sku = @sku,
+      dimensions = @dimensions,
+      lead_time = @lead_time,
+      designer = @designer,
+      alternative_to_id = @alternative_to_id,
+      image_path = @image_path,
+      price = @price,
+      webshop_url = @webshop_url,
+      description = @description,
+      notes = @notes,
+      tags = @tags,
+      status = @status,
+      supplier_id = @supplier_id,
+      parent_product_id = @parent_product_id,
+      purchase_price = @purchase_price,
+      sale_price = @sale_price,
+      margin = @margin,
+      vat_rate = @vat_rate,
+      availability_status = @availability_status,
+      price_date = @price_date,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = @id
+  `).run({
+    id: req.params.id,
+    name: req.body.name || current.name,
+    brand: req.body.brand ?? current.brand,
+    supplier: req.body.supplier ?? current.supplier,
+    category: req.body.category ?? current.category,
+    collection: req.body.collection ?? current.collection,
+    sku: req.body.sku ?? current.sku,
+    dimensions: req.body.dimensions ?? current.dimensions,
+    lead_time: req.body.lead_time ?? current.lead_time,
+    designer: req.body.designer ?? current.designer,
+    alternative_to_id: req.body.alternative_to_id || null,
+    image_path: req.file?.path || current.image_path,
+    price: Number(req.body.price ?? current.price),
+    webshop_url: req.body.webshop_url ?? current.webshop_url,
+    description: req.body.description ?? current.description,
+    notes: req.body.notes ?? current.notes,
+    tags: req.body.tags ?? current.tags,
+    status: req.body.status ?? current.status,
+    supplier_id: ("supplier_id" in req.body ? (req.body.supplier_id || null) : (current.supplier_id ?? null)),
+    parent_product_id: ("parent_product_id" in req.body ? (req.body.parent_product_id || null) : (current.parent_product_id ?? null)),
+    purchase_price: purchasePrice,
+    sale_price: salePrice,
+    margin: computeMargin(salePrice, purchasePrice),
+    vat_rate: Number(req.body.vat_rate ?? current.vat_rate ?? 21),
+    availability_status: req.body.availability_status ?? current.availability_status ?? "unknown",
+    price_date: req.body.price_date ?? current.price_date ?? ""
+  });
+  if (req.file && current.image_path && current.image_path !== req.file.path) {
+    removeUpload(current.image_path);
+  }
+  res.json(db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id));
+});
+
+router.delete("/:id", (req, res) => {
+  const current = db.prepare("SELECT image_path FROM products WHERE id = ?").get(req.params.id);
+  db.prepare("DELETE FROM project_products WHERE product_id = ?").run(req.params.id);
+  db.prepare("UPDATE products SET alternative_to_id = NULL WHERE alternative_to_id = ?").run(req.params.id);
+  db.prepare("DELETE FROM products WHERE id = ?").run(req.params.id);
+  if (current) removeUpload(current.image_path);
+  res.status(204).end();
+});
+
+// --- Variants ----------------------------------------------------------------
+router.get("/:id/variants", (req, res) => {
+  res.json(db.prepare(`
+    SELECT * FROM products WHERE parent_product_id = ? ORDER BY updated_at DESC, name
+  `).all(req.params.id));
+});
+
+router.post("/:id/variants", upload.single("image"), (req, res) => {
+  const parent = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+  if (!parent) return res.status(404).json({ error: "Product niet gevonden" });
+  const variantId = id("product");
+  const salePrice = Number(req.body.sale_price || 0);
+  const purchasePrice = Number(req.body.purchase_price || 0);
+  db.prepare(`
+    INSERT INTO products (id, name, brand, supplier, category, collection, sku, dimensions, lead_time, designer, alternative_to_id, image_path, price, webshop_url, description, notes, tags, status, supplier_id, parent_product_id, purchase_price, sale_price, margin, vat_rate, availability_status, price_date)
+    VALUES (@id, @name, @brand, @supplier, @category, @collection, @sku, @dimensions, @lead_time, @designer, @alternative_to_id, @image_path, @price, @webshop_url, @description, @notes, @tags, @status, @supplier_id, @parent_product_id, @purchase_price, @sale_price, @margin, @vat_rate, @availability_status, @price_date)
+  `).run({
+    id: variantId,
+    name: req.body.name || `${parent.name} (variant)`,
+    brand: req.body.brand ?? parent.brand,
+    supplier: req.body.supplier ?? parent.supplier,
+    category: req.body.category ?? parent.category,
+    collection: req.body.collection || "",
+    sku: req.body.sku || "",
+    dimensions: req.body.dimensions || "",
+    lead_time: req.body.lead_time || "",
+    designer: req.body.designer || "",
+    alternative_to_id: req.body.alternative_to_id || null,
+    image_path: req.file?.path || "",
+    price: Number(req.body.price || 0),
+    webshop_url: req.body.webshop_url || "",
+    description: req.body.description || "",
+    notes: req.body.notes || "",
+    tags: req.body.tags || "",
+    status: req.body.status || "candidate",
+    supplier_id: ("supplier_id" in req.body ? (req.body.supplier_id || null) : (parent.supplier_id ?? null)),
+    parent_product_id: req.params.id,
+    purchase_price: purchasePrice,
+    sale_price: salePrice,
+    margin: computeMargin(salePrice, purchasePrice),
+    vat_rate: Number(req.body.vat_rate ?? 21),
+    availability_status: req.body.availability_status || "unknown",
+    price_date: req.body.price_date || ""
+  });
+  res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(variantId));
+});
+
+// --- Favorites ---------------------------------------------------------------
+router.get("/favorites", (_req, res) => {
+  res.json(db.prepare(`
+    SELECT p.*, alt.name AS alternative_to_name, 1 AS is_favorite
+    FROM product_favorites f
+    JOIN products p ON p.id = f.product_id
+    LEFT JOIN products alt ON alt.id = p.alternative_to_id
+    ORDER BY f.created_at DESC, p.name
+  `).all());
+});
+
+router.post("/:id/favorite", (req, res) => {
+  db.prepare("INSERT OR IGNORE INTO product_favorites (product_id) VALUES (?)").run(req.params.id);
+  res.status(201).json({ product_id: req.params.id, is_favorite: 1 });
+});
+
+router.delete("/:id/favorite", (req, res) => {
+  db.prepare("DELETE FROM product_favorites WHERE product_id = ?").run(req.params.id);
+  res.status(204).end();
+});
+
+// --- Compare -----------------------------------------------------------------
+router.get("/compare", (req, res) => {
+  const ids = String(req.query.ids || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (ids.length === 0) return res.json([]);
+  const placeholders = ids.map(() => "?").join(",");
+  const found = db.prepare(`SELECT * FROM products WHERE id IN (${placeholders})`).all(...ids);
+  // Preserve the requested order so the comparison columns line up.
+  const byId = new Map(found.map((p) => [p.id, p]));
+  res.json(ids.map((value) => byId.get(value)).filter(Boolean));
+});
+
+// --- CSV export / import -----------------------------------------------------
+router.get("/export.csv", (_req, res) => {
+  const products = db.prepare("SELECT * FROM products ORDER BY updated_at DESC, name").all();
+  const header = ["id", "name", "brand", "supplier", "category", "sku", "price", "purchase_price", "sale_price", "vat_rate", "availability_status"];
+  const lines = [header.map(csvCell).join(",")];
+  for (const p of products) {
+    lines.push(header.map((field) => csvCell(p[field])).join(","));
+  }
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", 'attachment; filename="producten.csv"');
+  res.send(lines.join("\r\n"));
+});
+
+router.post("/import-csv", upload.single("file"), (req, res) => {
+  let text = "";
+  if (req.file) {
+    text = require("fs").readFileSync(req.file.path, "utf8");
+    removeUpload(req.file.path);
+  } else if (typeof req.body === "string") {
+    text = req.body;
+  } else if (req.body && typeof req.body.csv === "string") {
+    text = req.body.csv;
+  }
+  text = String(text || "").trim();
+  if (!text) return res.json({ created: 0 });
+
+  const rows = parseCsv(text);
+  if (rows.length < 2) return res.json({ created: 0 });
+  const header = rows[0].map((cell) => cell.trim());
+  const indexOf = (name) => header.indexOf(name);
+  const idx = {
+    name: indexOf("name"),
+    brand: indexOf("brand"),
+    supplier: indexOf("supplier"),
+    category: indexOf("category"),
+    sku: indexOf("sku"),
+    price: indexOf("price"),
+    purchase_price: indexOf("purchase_price"),
+    sale_price: indexOf("sale_price"),
+    vat_rate: indexOf("vat_rate"),
+    availability_status: indexOf("availability_status")
+  };
+  const cell = (row, key) => (idx[key] >= 0 ? (row[idx[key]] ?? "") : "");
+
+  const insert = db.prepare(`
+    INSERT INTO products (id, name, brand, supplier, category, sku, price, purchase_price, sale_price, margin, vat_rate, availability_status, status)
+    VALUES (@id, @name, @brand, @supplier, @category, @sku, @price, @purchase_price, @sale_price, @margin, @vat_rate, @availability_status, @status)
+  `);
+  let created = 0;
+  const importAll = db.transaction((dataRows) => {
+    for (const row of dataRows) {
+      const name = String(cell(row, "name") || "").trim();
+      if (!name) continue;
+      const salePrice = Number(cell(row, "sale_price") || 0) || 0;
+      const purchasePrice = Number(cell(row, "purchase_price") || 0) || 0;
+      const vatRaw = cell(row, "vat_rate");
+      insert.run({
+        id: id("product"),
+        name,
+        brand: String(cell(row, "brand") || "").trim(),
+        supplier: String(cell(row, "supplier") || "").trim(),
+        category: String(cell(row, "category") || "").trim(),
+        sku: String(cell(row, "sku") || "").trim(),
+        price: Number(cell(row, "price") || 0) || 0,
+        purchase_price: purchasePrice,
+        sale_price: salePrice,
+        margin: computeMargin(salePrice, purchasePrice),
+        vat_rate: vatRaw === "" ? 21 : (Number(vatRaw) || 0),
+        availability_status: String(cell(row, "availability_status") || "").trim() || "unknown",
+        status: "candidate"
+      });
+      created += 1;
+    }
+  });
+  importAll(rows.slice(1));
+  res.json({ created });
+});
+
+router.post("/select", (req, res) => {
+  const selectionId = id("selection");
+  db.prepare(`
+    INSERT INTO project_products (id, project_id, room_id, product_id, quantity, sort_order, designer_note, fit_reason, is_feature, item_status, client_comment, is_alternative)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    selectionId,
+    req.body.project_id,
+    req.body.room_id || null,
+    req.body.product_id,
+    Number(req.body.quantity || 1),
+    Number(req.body.sort_order || 0),
+    req.body.designer_note || "",
+    req.body.fit_reason || "",
+    req.body.is_feature ? 1 : 0,
+    req.body.item_status || "proposed",
+    req.body.client_comment || "",
+    req.body.is_alternative ? 1 : 0
+  );
+  res.status(201).json(db.prepare("SELECT * FROM project_products WHERE id = ?").get(selectionId));
+});
+
+router.put("/selection/:id", (req, res) => {
+  const current = db.prepare("SELECT * FROM project_products WHERE id = ?").get(req.params.id);
+  if (!current) return res.status(404).json({ error: "Selectie niet gevonden" });
+  db.prepare(`
+    UPDATE project_products SET
+      room_id = @room_id,
+      quantity = @quantity,
+      sort_order = @sort_order,
+      designer_note = @designer_note,
+      fit_reason = @fit_reason,
+      is_feature = @is_feature,
+      item_status = @item_status,
+      client_comment = @client_comment,
+      is_alternative = @is_alternative
+    WHERE id = @id
+  `).run({
+    id: req.params.id,
+    room_id: req.body.room_id || null,
+    quantity: Number(req.body.quantity || 1),
+    sort_order: Number(req.body.sort_order || 0),
+    designer_note: req.body.designer_note ?? current.designer_note,
+    fit_reason: req.body.fit_reason ?? current.fit_reason,
+    is_feature: ("is_feature" in req.body ? (req.body.is_feature ? 1 : 0) : current.is_feature),
+    item_status: req.body.item_status ?? current.item_status,
+    client_comment: req.body.client_comment ?? current.client_comment,
+    is_alternative: ("is_alternative" in req.body ? (req.body.is_alternative ? 1 : 0) : current.is_alternative)
+  });
+  res.json(db.prepare("SELECT * FROM project_products WHERE id = ?").get(req.params.id));
+});
+
+// Update just the workflow/feedback fields of a selection.
+router.put("/selection/:id/status", (req, res) => {
+  const current = db.prepare("SELECT * FROM project_products WHERE id = ?").get(req.params.id);
+  if (!current) return res.status(404).json({ error: "Selectie niet gevonden" });
+  db.prepare(`
+    UPDATE project_products SET
+      item_status = @item_status,
+      client_comment = @client_comment
+    WHERE id = @id
+  `).run({
+    id: req.params.id,
+    item_status: req.body.item_status ?? current.item_status,
+    client_comment: req.body.client_comment ?? current.client_comment
+  });
+  res.json(db.prepare("SELECT * FROM project_products WHERE id = ?").get(req.params.id));
+});
+
+router.delete("/selection/:id", (req, res) => {
+  db.prepare("DELETE FROM project_products WHERE id = ?").run(req.params.id);
+  res.status(204).end();
+});
+
+// Effective unit price for a shopping-list row: sale_price when set, else price.
+function effectivePrice(row) {
+  const sale = Number(row.sale_price || 0);
+  return sale > 0 ? sale : Number(row.price || 0);
+}
+
+function shoppingListRows(projectId) {
+  const { uploadUrl } = require("./utils");
+  return db.prepare(`
+    SELECT pp.id, pp.quantity, pp.sort_order, pp.designer_note, pp.fit_reason, pp.is_feature, pp.room_id, pp.product_id,
+      pp.item_status, pp.client_comment, pp.is_alternative,
+      r.name AS room_name, r.sort_order AS room_sort,
+      p.name, p.brand, p.supplier, p.category, p.image_path, p.price, p.sale_price, p.webshop_url, p.description, p.designer
+    FROM project_products pp
+    JOIN products p ON p.id = pp.product_id
+    LEFT JOIN rooms r ON r.id = pp.room_id
+    WHERE pp.project_id = ?
+    ORDER BY r.sort_order, r.name, pp.sort_order, p.category, p.name
+  `).all(projectId).map((row) => ({ ...row, image_url: uploadUrl(row.image_path) }));
+}
+
+router.get("/shopping-list/:projectId", (req, res) => {
+  const rows = shoppingListRows(req.params.projectId);
+  const total = rows.reduce((sum, row) => sum + effectivePrice(row) * Number(row.quantity || 1), 0);
+  res.json({ total, items: rows });
+});
+
+router.get("/shopping-list/:projectId/export.csv", (req, res) => {
+  const rows = shoppingListRows(req.params.projectId);
+  const header = ["room", "product", "brand", "quantity", "unit_price", "line_total"];
+  const lines = [header.map(csvCell).join(",")];
+  for (const row of rows) {
+    const qty = Number(row.quantity || 1);
+    const unit = effectivePrice(row);
+    lines.push([
+      row.room_name || "",
+      row.name,
+      row.brand,
+      qty,
+      unit,
+      unit * qty
+    ].map(csvCell).join(","));
+  }
+  res.setHeader("Content-Type", "text/csv");
+  res.setHeader("Content-Disposition", 'attachment; filename="boodschappenlijst.csv"');
+  res.send(lines.join("\r\n"));
+});
+
+module.exports = router;
