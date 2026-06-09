@@ -2,8 +2,77 @@ const express = require("express");
 const { db } = require("../db/database");
 const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
+const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
+
+// --- Validation schemas ------------------------------------------------------
+// Product create/update/variant share the same multipart field set. Body values
+// arrive as strings (multer), so numbers use z.coerce. Everything is optional —
+// the handlers keep their own `|| ""` / `?? current` fallbacks.
+const productSchema = z.object({
+  name: z.string().optional(),
+  brand: z.string().optional(),
+  supplier: z.string().optional(),
+  category: z.string().optional(),
+  collection: z.string().optional(),
+  sku: z.string().optional(),
+  dimensions: z.string().optional(),
+  lead_time: z.string().optional(),
+  designer: z.string().optional(),
+  alternative_to_id: z.string().optional(),
+  price: z.coerce.number().optional(),
+  webshop_url: z.string().optional(),
+  description: z.string().optional(),
+  notes: z.string().optional(),
+  tags: z.string().optional(),
+  status: z.string().optional(),
+  supplier_id: z.string().optional(),
+  parent_product_id: z.string().optional(),
+  purchase_price: z.coerce.number().optional(),
+  sale_price: z.coerce.number().optional(),
+  vat_rate: z.coerce.number().optional(),
+  availability_status: z.string().optional(),
+  price_date: z.string().optional()
+});
+
+// POST /select needs project_id + product_id (used directly in the INSERT).
+const selectSchema = z.object({
+  project_id: z.string(),
+  product_id: z.string(),
+  room_id: z.string().optional(),
+  quantity: z.coerce.number().optional(),
+  sort_order: z.coerce.number().optional(),
+  designer_note: z.string().optional(),
+  fit_reason: z.string().optional(),
+  // Left untyped: the handler does its own truthiness coercion (`x ? 1 : 0`),
+  // so coercing here could alter the meaning of strings like "false".
+  is_feature: z.any().optional(),
+  item_status: z.enum(["proposed", "approved", "rejected"]).optional(),
+  client_comment: z.string().optional(),
+  is_alternative: z.any().optional()
+});
+
+const selectionUpdateSchema = z.object({
+  room_id: z.string().optional(),
+  quantity: z.coerce.number().optional(),
+  sort_order: z.coerce.number().optional(),
+  designer_note: z.string().optional(),
+  fit_reason: z.string().optional(),
+  is_feature: z.any().optional(),
+  item_status: z.enum(["proposed", "approved", "rejected"]).optional(),
+  client_comment: z.string().optional(),
+  is_alternative: z.any().optional()
+});
+
+const selectionStatusSchema = z.object({
+  item_status: z.enum(["proposed", "approved", "rejected"]).optional(),
+  client_comment: z.string().optional()
+});
+
+const importCsvSchema = z.object({
+  csv: z.string().optional()
+});
 
 // margin = sale_price - purchase_price, but only when both are > 0.
 function computeMargin(salePrice, purchasePrice) {
@@ -69,7 +138,7 @@ router.get("/", (_req, res) => {
   `).all());
 });
 
-router.post("/", upload.single("image"), (req, res) => {
+router.post("/", upload.single("image"), validateForm(productSchema), (req, res) => {
   const productId = id("product");
   const salePrice = Number(req.body.sale_price || 0);
   const purchasePrice = Number(req.body.purchase_price || 0);
@@ -107,7 +176,7 @@ router.post("/", upload.single("image"), (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(productId));
 });
 
-router.put("/:id", upload.single("image"), (req, res) => {
+router.put("/:id", upload.single("image"), validateForm(productSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Product niet gevonden" });
   const salePrice = Number(req.body.sale_price ?? current.sale_price ?? 0);
@@ -191,7 +260,7 @@ router.get("/:id/variants", (req, res) => {
   `).all(req.params.id));
 });
 
-router.post("/:id/variants", upload.single("image"), (req, res) => {
+router.post("/:id/variants", upload.single("image"), validateForm(productSchema), (req, res) => {
   const parent = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
   if (!parent) return res.status(404).json({ error: "Product niet gevonden" });
   const variantId = id("product");
@@ -279,7 +348,7 @@ router.get("/export.csv", (_req, res) => {
   res.send(lines.join("\r\n"));
 });
 
-router.post("/import-csv", upload.single("file"), (req, res) => {
+router.post("/import-csv", upload.single("file"), validateForm(importCsvSchema), (req, res) => {
   let text = "";
   if (req.file) {
     text = require("fs").readFileSync(req.file.path, "utf8");
@@ -344,7 +413,7 @@ router.post("/import-csv", upload.single("file"), (req, res) => {
   res.json({ created });
 });
 
-router.post("/select", (req, res) => {
+router.post("/select", validateBody(selectSchema), (req, res) => {
   const selectionId = id("selection");
   db.prepare(`
     INSERT INTO project_products (id, project_id, room_id, product_id, quantity, sort_order, designer_note, fit_reason, is_feature, item_status, client_comment, is_alternative)
@@ -366,7 +435,7 @@ router.post("/select", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM project_products WHERE id = ?").get(selectionId));
 });
 
-router.put("/selection/:id", (req, res) => {
+router.put("/selection/:id", validateBody(selectionUpdateSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM project_products WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Selectie niet gevonden" });
   db.prepare(`
@@ -397,7 +466,7 @@ router.put("/selection/:id", (req, res) => {
 });
 
 // Update just the workflow/feedback fields of a selection.
-router.put("/selection/:id/status", (req, res) => {
+router.put("/selection/:id/status", validateBody(selectionStatusSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM project_products WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Selectie niet gevonden" });
   db.prepare(`

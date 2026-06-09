@@ -2,8 +2,25 @@ const express = require("express");
 const { db } = require("../db/database");
 const { id } = require("./utils");
 const { record } = require("./audit");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
+
+const colorSchema = z.object({
+  name: z.string().min(1),
+  hex: z.string().optional(),
+  brand: z.string().optional(),
+  code: z.string().optional(),
+  finish: z.string().optional(),
+  notes: z.string().optional()
+});
+
+const roomColorSchema = z.object({
+  color_id: z.string().optional(),
+  hex: z.string().optional(),
+  name: z.string().optional(),
+  application: z.string().optional()
+});
 
 // --- Color library (reusable palette) ---
 
@@ -11,7 +28,7 @@ router.get("/", (_req, res) => {
   res.json(db.prepare("SELECT * FROM color_library ORDER BY name").all());
 });
 
-router.post("/", (req, res) => {
+router.post("/", validateBody(colorSchema), (req, res) => {
   const colorId = id("color");
   db.prepare(`
     INSERT INTO color_library (id, name, hex, brand, code, finish, notes)
@@ -29,7 +46,7 @@ router.post("/", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM color_library WHERE id = ?").get(colorId));
 });
 
-router.put("/:id", (req, res) => {
+router.put("/:id", validateBody(colorSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM color_library WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Kleur niet gevonden" });
   db.prepare(`
@@ -76,7 +93,7 @@ router.get("/room/:roomId", (req, res) => {
   `).all(req.params.roomId));
 });
 
-router.post("/room/:roomId", (req, res) => {
+router.post("/room/:roomId", validateBody(roomColorSchema), (req, res) => {
   const roomColorId = id("roomcolor");
   let hex = req.body.hex || "";
   let name = req.body.name || "";
@@ -103,7 +120,7 @@ router.post("/room/:roomId", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM room_colors WHERE id = ?").get(roomColorId));
 });
 
-router.put("/room-color/:id", (req, res) => {
+router.put("/room-color/:id", validateBody(roomColorSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM room_colors WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Kleurtoepassing niet gevonden" });
   db.prepare(`

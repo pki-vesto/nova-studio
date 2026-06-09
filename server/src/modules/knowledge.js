@@ -2,8 +2,37 @@ const express = require("express");
 const { db } = require("../db/database");
 const { id, parseJson } = require("./utils");
 const { record } = require("./audit");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
+
+// ---- Validation schemas ----------------------------------------------------
+
+const nodeSchema = z.object({
+  type: z.string(),
+  label: z.string(),
+  ref_id: z.string().optional(),
+  data: z.any().optional()
+});
+
+const sourceSchema = z.object({
+  label: z.string().optional(),
+  url: z.string().optional()
+});
+
+const edgeSchema = z.object({
+  from_id: z.string(),
+  to_id: z.string(),
+  relation: z.string().optional(),
+  weight: z.coerce.number().optional()
+});
+
+const promoteSchema = z.object({
+  type: z.string(),
+  label: z.string(),
+  ref_id: z.string().optional(),
+  data: z.any().optional()
+});
 
 // Hydrate a raw node row: parse data_json into a `data` object.
 function hydrate(node) {
@@ -24,7 +53,7 @@ router.get("/nodes", (req, res) => {
   res.json(rows.map(hydrate));
 });
 
-router.post("/nodes", (req, res) => {
+router.post("/nodes", validateBody(nodeSchema), (req, res) => {
   const nodeId = id("knode");
   const data = req.body.data ?? {};
   db.prepare(`
@@ -50,7 +79,7 @@ router.delete("/nodes/:id", (req, res) => {
   res.status(204).end();
 });
 
-router.post("/nodes/:id/sources", (req, res) => {
+router.post("/nodes/:id/sources", validateBody(sourceSchema), (req, res) => {
   const node = db.prepare("SELECT id FROM knowledge_nodes WHERE id = ?").get(req.params.id);
   if (!node) return res.status(404).json({ error: "Knooppunt niet gevonden" });
   const sourceId = id("ksrc");
@@ -68,7 +97,7 @@ router.get("/edges", (_req, res) => {
   res.json(db.prepare("SELECT * FROM knowledge_edges ORDER BY created_at DESC").all());
 });
 
-router.post("/edges", (req, res) => {
+router.post("/edges", validateBody(edgeSchema), (req, res) => {
   const from = db.prepare("SELECT id FROM knowledge_nodes WHERE id = ?").get(req.body.from_id);
   const to = db.prepare("SELECT id FROM knowledge_nodes WHERE id = ?").get(req.body.to_id);
   if (!from || !to) return res.status(404).json({ error: "Knooppunt niet gevonden" });
@@ -203,7 +232,7 @@ router.get("/path", (req, res) => {
 
 // ---- Promote (upsert from a domain entity) --------------------------------
 
-router.post("/promote", (req, res) => {
+router.post("/promote", validateBody(promoteSchema), (req, res) => {
   const type = req.body.type || "concept";
   const refId = req.body.ref_id || "";
   const label = req.body.label || "Naamloos";

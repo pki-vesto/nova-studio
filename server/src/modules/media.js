@@ -5,8 +5,30 @@ const { db } = require("../db/database");
 const { id, uploadUrl } = require("./utils");
 const { upload, removeUpload, uploadDir } = require("./uploads");
 const { record } = require("./audit");
+const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
+
+// ---- Validation schemas ----------------------------------------------------
+
+const mediaSchema = z.object({
+  file_path: z.string(),
+  file_name: z.string().optional(),
+  mime_type: z.string().optional(),
+  alt_text: z.string().optional(),
+  tags: z.string().optional(),
+  domain: z.string().optional(),
+  ref_id: z.string().optional()
+});
+
+// POST /upload supplies file_path/file_name/mime_type from req.file, so the
+// body only carries metadata fields.
+const uploadSchema = z.object({
+  alt_text: z.string().optional(),
+  tags: z.string().optional(),
+  domain: z.string().optional(),
+  ref_id: z.string().optional()
+});
 
 // Attach a public url to a media row for the client.
 function withUrl(row) {
@@ -76,7 +98,7 @@ router.get("/orphans", (_req, res) => {
 });
 
 // POST /upload - upload a file and register its metadata in one step.
-router.post("/upload", upload.single("file"), (req, res) => {
+router.post("/upload", upload.single("file"), validateForm(uploadSchema), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Geen bestand ontvangen" });
   const mediaId = id("media");
   db.prepare(`
@@ -96,7 +118,7 @@ router.post("/upload", upload.single("file"), (req, res) => {
 });
 
 // POST / - register metadata for an already-uploaded file.
-router.post("/", (req, res) => {
+router.post("/", validateBody(mediaSchema), (req, res) => {
   if (!req.body.file_path) return res.status(400).json({ error: "file_path is verplicht" });
   const mediaId = id("media");
   db.prepare(`
@@ -116,7 +138,7 @@ router.post("/", (req, res) => {
 });
 
 // PUT /:id - update editable metadata fields.
-router.put("/:id", (req, res) => {
+router.put("/:id", validateBody(mediaSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM media WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Media niet gevonden" });
   db.prepare(`

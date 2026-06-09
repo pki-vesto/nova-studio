@@ -1,6 +1,7 @@
 const express = require("express");
 const { db } = require("../db/database");
 const { parseJson } = require("./utils");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
 const fields = [
@@ -15,6 +16,22 @@ const fields = [
   "free_notes",
   "ai_summary"
 ];
+
+const intakeSchema = z.object({
+  household: z.string().optional(),
+  wishes: z.string().optional(),
+  room_use: z.string().optional(),
+  style_preferences: z.string().optional(),
+  color_preferences: z.string().optional(),
+  budget_indication: z.string().optional(),
+  existing_furniture: z.string().optional(),
+  constraints: z.string().optional(),
+  free_notes: z.string().optional(),
+  ai_summary: z.string().optional(),
+  scope_estimate: z.string().optional(),
+  risks: z.array(z.any()).optional(),
+  followups: z.array(z.any()).optional()
+});
 
 function hydrate(row) {
   if (!row) return null;
@@ -31,7 +48,7 @@ router.get("/:projectId", (req, res) => {
   res.json(hydrate(row));
 });
 
-router.put("/:projectId", (req, res) => {
+router.put("/:projectId", validateBody(intakeSchema, { partial: true }), (req, res) => {
   db.prepare("INSERT OR IGNORE INTO intake (project_id) VALUES (?)").run(req.params.projectId);
   const payload = fields.reduce((acc, field) => ({ ...acc, [field]: req.body[field] ?? "" }), {});
   db.prepare(`

@@ -3,8 +3,25 @@ const crypto = require("crypto");
 const { db } = require("../db/database");
 const { id, parseJson, uploadUrl } = require("./utils");
 const { record } = require("./audit");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
+
+// ---- Validation schemas ----------------------------------------------------
+
+const accessSchema = z.object({
+  project_id: z.string(),
+  proposal_id: z.string().optional(),
+  label: z.string().optional(),
+  expires_at: z.string().optional()
+});
+
+const feedbackSchema = z.object({
+  target_type: z.enum(["section", "product", "proposal"]).optional(),
+  target_id: z.string().optional(),
+  decision: z.string().optional(),
+  body: z.string().optional()
+});
 
 // ---------------------------------------------------------------------------
 // Token helpers
@@ -45,7 +62,7 @@ function rejectToken(res, reason) {
 // ---------------------------------------------------------------------------
 
 // Create a magic-link access token for a project (optionally tied to a proposal).
-router.post("/access", (req, res) => {
+router.post("/access", validateBody(accessSchema), (req, res) => {
   const { project_id, proposal_id, label, expires_at } = req.body || {};
   if (!project_id) return res.status(400).json({ error: "project_id is verplicht" });
   const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(project_id);
@@ -189,7 +206,7 @@ router.get("/view/:token", (req, res) => {
 });
 
 // Client submits feedback on a section / product / the whole proposal.
-router.post("/view/:token/feedback", (req, res) => {
+router.post("/view/:token/feedback", validateBody(feedbackSchema), (req, res) => {
   const { ok, row, reason } = loadValidToken(req.params.token);
   if (!ok) return rejectToken(res, reason);
 

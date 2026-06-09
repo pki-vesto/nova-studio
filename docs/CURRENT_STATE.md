@@ -1,6 +1,6 @@
 # Nova Studio Current State
 
-Laatst bijgewerkt: 2026-06-09 (na de platform-expansie).
+Laatst bijgewerkt: 2026-06-09 (na de platform-expansie + de validatie-/foutafhandelingsiteratie).
 
 Bronnen: code-inspectie van `/home/peter/nova-studio` — SQLite-schema (`server/src/db/schema.js`), Express-routes (`server/src/index.js` + `server/src/modules/*`), frontendschermen (`web/src/screens/*`, `web/src/App.jsx`), Docker-config en `npm test` (util- en API-integratietests).
 
@@ -12,7 +12,9 @@ Leeswijzer per domein: **Werkt** = functioneel en gewired, **Getest** = automati
 
 Werkt: React/Vite app-shell met sidebar, topbar, globale zoekinput, projecttabs en error banner. **Hash-routing** (`#/<view>`, `#/project/<id>/<tab>`) met deep links en browser-history. **⌘K / Ctrl+K command palette** om tussen views, projecttabs en projecten te springen. **Optionele login-gate** (alleen actief zodra er gebruikers bestaan). Publieke standalone route `#/portal/<token>` zonder app-shell of auth. Tweaks-paneel in localStorage. Express static serving, `/api/health`.
 
-Getest: `npm test` draait util-tests én API-integratietests (`server/src/modules/api.test.js`: client/project aanmaken, productselectie + shoppingtotaal, voorstel + secties + PDF-export, proposal-statusflow). `npm run build` is de release-build-check (niet in deze docs-run uitgevoerd).
+Validatie & foutafhandeling: inputvalidatie is **gecentraliseerd** in `server/src/modules/validate.js` (`validateBody`/`validateForm`-middleware op zod-basis) en toegepast op de write-endpoints van vrijwel alle modules. Gevalideerde waarden worden gecoërceerd en teruggemerged op `req.body`, terwijl onbekende velden en de PUT-diff-checks intact blijven; schema's vermijden `.default()` zodat handler-fallbacks blijven werken. Elke API-fout deelt één envelope `{ error, details? }`. De globale error-handler in `server/src/index.js` mapt `ZodError` → 400 met `details`, multer `LIMIT_FILE_SIZE` → 413 en respecteert `err.status`.
+
+Getest: `npm test` draait util-tests, API-integratietests (`server/src/modules/api.test.js`: client/project aanmaken, productselectie + shoppingtotaal, voorstel + secties + PDF-export, proposal-statusflow) én validatietests (`server/src/modules/validate.test.js`: envelope-vorm, ZodError-flattening, 400-afwijzing, coërceren/mergen, partial-mode). Totaal **13 tests** (3 util + 5 API + 5 validate). `npm run build` is de release-build-check (niet in deze docs-run uitgevoerd).
 
 Live staat: Docker/Tailscale-config met app-service op poort 4000 en loopback smoke endpoint op 127.0.0.1:4100. Runtime-status niet geverifieerd in deze run.
 
@@ -200,7 +202,7 @@ Live staat: geen render-jobs.
 - **AI draait alleen live tegen Anthropic als `ANTHROPIC_API_KEY` is gezet** én AI is ingeschakeld; anders een eerlijk lokaal concept. Geen andere providers geïmplementeerd.
 - **E-mailnotificaties zijn gescaffold**: portaalreacties zetten een rij in `notifications` met `sent = 0`. Er wordt niets daadwerkelijk verstuurd (geen SMTP/provider).
 - **Auth zonder CSRF/rate-limiting**: token-based, prima voor lokaal/tailnet, niet gehard voor publiek internet.
-- **Validatie is niet uniform**: sommige modules gebruiken zod (projects, auth), andere lezen body-velden direct.
+- **Validatie is nu gecentraliseerd** via `validate.js` en toegepast op de write-endpoints van vrijwel alle modules; alle API-fouten delen het envelope `{ error, details? }`. `projects` en `auth` gebruiken nog eigen inline zod-schema's (`safeParse`) i.p.v. de gedeelde middleware, maar leveren hetzelfde foutcontract.
 - **Testdekking is smal**: util- + kern-API-integratietests; geen frontend-/e2e-/PDF-visual-tests.
 - **Geen pagination/filtering-standaard** op de lijst-endpoints (datasets zijn nog klein).
 

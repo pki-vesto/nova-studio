@@ -17,6 +17,8 @@ Na de platform-expansie:
 
 De meeste items 56–276 zijn **Completed** of **Partial**. Uitzonderingen die **Not Started** blijven zijn expliciet als zodanig gemarkeerd; het Future Vision-blok (281–300) is volledig **Not Started**.
 
+Addendum (validatie-/foutafhandelingsiteratie, 2026-06-09): de gecentraliseerde validatielaag (`validate.js`) en het gestandaardiseerde API-foutformaat `{ error, details? }` zijn geland — items 196 en 197 zijn nu **Completed**.
+
 ## V1
 
 1. [Completed] Projectlijst met statusfilters.
@@ -217,8 +219,8 @@ De meeste items 56–276 zijn **Completed** of **Partial**. Uitzonderingen die *
 193. [Not Started] Desktop screenshot regressietest.
 194. [Partial] Print CSS uitbreiden.
 195. [Not Started] PDF visual regression smoke-test.
-196. [Partial] Form validatie uniformeren met zod. (projects/auth via zod; rest direct)
-197. [Partial] API error format standaardiseren. (centrale errorhandler; niet overal uniform)
+196. [Completed] Form validatie uniformeren met zod. (gecentraliseerd in `validate.js`, `validateBody`/`validateForm` op vrijwel alle write-endpoints; projects/auth via eigen inline zod met hetzelfde foutcontract)
+197. [Completed] API error format standaardiseren. (één envelope `{ error, details? }`, globale handler mapt ZodError→400/multer→413/`err.status`)
 198. [Not Started] API pagination voorbereiden.
 199. [Partial] API filtering standaardiseren. (query-filters per module; geen gedeelde laag)
 200. [Not Started] API service layer introduceren waar domeinlogica groeit.

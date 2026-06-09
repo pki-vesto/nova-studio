@@ -5,8 +5,18 @@ const { db } = require("../db/database");
 const { id, parseJson, uploadUrl } = require("./utils");
 const { uploadDir } = require("./uploads");
 const { record } = require("./audit");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
+
+// ---- Validation schema -----------------------------------------------------
+
+const createSchema = z.object({
+  project_id: z.string(),
+  room_id: z.string().optional(),
+  provider: z.string().optional(),
+  input: z.any().optional()
+});
 
 // Escape text for safe inclusion in SVG markup.
 function svgEscape(value) {
@@ -84,7 +94,7 @@ router.get("/project/:pid", (req, res) => {
 });
 
 // POST / — create a queued render job.
-router.post("/", (req, res) => {
+router.post("/", validateBody(createSchema), (req, res) => {
   const { project_id, room_id, provider, input } = req.body || {};
   if (!project_id) return res.status(400).json({ error: "project_id is verplicht" });
 

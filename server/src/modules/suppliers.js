@@ -2,8 +2,34 @@ const express = require("express");
 const { db } = require("../db/database");
 const { id } = require("./utils");
 const { record } = require("./audit");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
+
+const supplierSchema = z.object({
+  name: z.string().min(1),
+  website: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  category: z.string().optional(),
+  conditions: z.string().optional(),
+  reliability_notes: z.string().optional(),
+  rating: z.coerce.number().optional(),
+  notes: z.string().optional()
+});
+
+const contactSchema = z.object({
+  name: z.string().min(1),
+  role: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  notes: z.string().optional()
+});
+
+const leadTimeSchema = z.object({
+  lead_days: z.coerce.number().int().optional(),
+  notes: z.string().optional()
+});
 
 // --- Suppliers --------------------------------------------------------------
 
@@ -20,7 +46,7 @@ router.get("/", (_req, res) => {
   `).all());
 });
 
-router.post("/", (req, res) => {
+router.post("/", validateBody(supplierSchema), (req, res) => {
   const supplierId = id("supplier");
   db.prepare(`
     INSERT INTO suppliers (id, name, website, email, phone, category, conditions, reliability_notes, rating, notes)
@@ -53,7 +79,7 @@ router.get("/:id", (req, res) => {
   res.json(supplier);
 });
 
-router.put("/:id", (req, res) => {
+router.put("/:id", validateBody(supplierSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM suppliers WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Leverancier niet gevonden" });
   db.prepare(`
@@ -95,7 +121,7 @@ router.delete("/:id", (req, res) => {
 
 // --- Contacts ---------------------------------------------------------------
 
-router.post("/:id/contacts", (req, res) => {
+router.post("/:id/contacts", validateBody(contactSchema), (req, res) => {
   const supplier = db.prepare("SELECT id FROM suppliers WHERE id = ?").get(req.params.id);
   if (!supplier) return res.status(404).json({ error: "Leverancier niet gevonden" });
   const contactId = id("contact");
@@ -115,7 +141,7 @@ router.post("/:id/contacts", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM supplier_contacts WHERE id = ?").get(contactId));
 });
 
-router.put("/contacts/:cid", (req, res) => {
+router.put("/contacts/:cid", validateBody(contactSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM supplier_contacts WHERE id = ?").get(req.params.cid);
   if (!current) return res.status(404).json({ error: "Contact niet gevonden" });
   db.prepare(`
@@ -148,7 +174,7 @@ router.delete("/contacts/:cid", (req, res) => {
 
 // --- Lead times -------------------------------------------------------------
 
-router.post("/:id/lead-times", (req, res) => {
+router.post("/:id/lead-times", validateBody(leadTimeSchema), (req, res) => {
   const supplier = db.prepare("SELECT id FROM suppliers WHERE id = ?").get(req.params.id);
   if (!supplier) return res.status(404).json({ error: "Leverancier niet gevonden" });
   const leadId = id("leadtime");

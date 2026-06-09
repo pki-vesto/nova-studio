@@ -26,6 +26,7 @@ const ai = require("./modules/ai");
 const auth = require("./modules/auth");
 const portal = require("./modules/portal");
 const audit = require("./modules/audit");
+const { errorBody, zodDetails, isZodError } = require("./modules/validate");
 
 migrate();
 
@@ -80,10 +81,13 @@ app.use((_req, res, next) => {
 
 app.use((err, _req, res, _next) => {
   if (err && err.code === "LIMIT_FILE_SIZE") {
-    return res.status(413).json({ error: "Bestand is te groot (max. 25 MB)" });
+    return res.status(413).json(errorBody("Bestand is te groot (max. 25 MB)"));
   }
-  const status = err.name === "ZodError" ? 400 : 500;
-  res.status(status).json({ error: err.message || "Serverfout" });
+  if (isZodError(err)) {
+    return res.status(400).json(errorBody("Validatiefout", zodDetails(err)));
+  }
+  const status = Number(err && err.status) || 500;
+  res.status(status).json(errorBody(err && err.message ? err.message : "Serverfout"));
 });
 
 app.listen(port, () => {

@@ -4,8 +4,64 @@ const path = require("path");
 const PDFDocument = require("pdfkit");
 const { db } = require("../db/database");
 const { id } = require("./utils");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
+
+// --- Validation schemas ------------------------------------------------------
+// JSON routes only. Optional strings keep the handlers' own `|| ""` / `?? current`
+// fallbacks. project_id is required on create (NOT NULL FK used directly).
+const proposalCreateSchema = z.object({
+  project_id: z.string(),
+  title: z.string().optional(),
+  intro_text: z.string().optional(),
+  style_direction: z.string().optional(),
+  color_advice: z.string().optional(),
+  closing_text: z.string().optional(),
+  summary: z.string().optional()
+});
+
+const proposalUpdateSchema = z.object({
+  title: z.string().optional(),
+  intro_text: z.string().optional(),
+  style_direction: z.string().optional(),
+  color_advice: z.string().optional(),
+  closing_text: z.string().optional(),
+  summary: z.string().optional(),
+  status: z.enum(["concept", "review", "sent", "accepted", "rejected"]).optional()
+});
+
+const proposalStatusSchema = z.object({
+  status: z.enum(["concept", "review", "sent", "accepted", "rejected"])
+});
+
+const sectionCreateSchema = z.object({
+  kind: z.string().optional(),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  audience: z.enum(["client", "internal"]).optional(),
+  is_enabled: z.coerce.number().int().optional(),
+  sort_order: z.coerce.number().int().optional()
+});
+
+const sectionUpdateSchema = z.object({
+  kind: z.string().optional(),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  audience: z.enum(["client", "internal"]).optional(),
+  is_enabled: z.coerce.number().int().optional(),
+  sort_order: z.coerce.number().int().optional()
+});
+
+const reorderSchema = z.object({
+  order: z.array(z.string()).optional()
+});
+
+const commentCreateSchema = z.object({
+  section_id: z.string().optional(),
+  author: z.string().optional(),
+  body: z.string().optional()
+});
 const exportDir = process.env.NOVA_EXPORT_DIR || path.join(process.cwd(), "data", "exports");
 fs.mkdirSync(exportDir, { recursive: true });
 
@@ -375,7 +431,7 @@ function seedSections(proposalId) {
 // ---------------------------------------------------------------------------
 // Proposal CRUD
 // ---------------------------------------------------------------------------
-router.post("/", (req, res) => {
+router.post("/", validateBody(proposalCreateSchema), (req, res) => {
   const proposalId = id("proposal");
   const tx = db.transaction(() => {
     db.prepare(`
@@ -398,7 +454,7 @@ router.post("/", (req, res) => {
 });
 
 // Update scalar text fields + status. Keeps the current value when a field is missing.
-router.put("/:id", (req, res) => {
+router.put("/:id", validateBody(proposalUpdateSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM proposals WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Voorstel niet gevonden" });
   const fields = ["title", "intro_text", "style_direction", "color_advice", "closing_text", "summary", "status"];
@@ -461,7 +517,7 @@ router.post("/:id/new-version", (req, res) => {
 
 // Status transition (sets accepted_at when entering 'accepted').
 const VALID_STATUSES = ["concept", "review", "sent", "accepted", "rejected"];
-router.put("/:id/status", (req, res) => {
+router.put("/:id/status", validateBody(proposalStatusSchema), (req, res) => {
   const current = db.prepare("SELECT * FROM proposals WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Voorstel niet gevonden" });
   const status = req.body.status;
@@ -483,7 +539,7 @@ router.get("/:id/sections", (req, res) => {
   res.json(db.prepare("SELECT * FROM proposal_sections WHERE proposal_id = ? ORDER BY sort_order").all(req.params.id));
 });
 
-router.post("/:id/sections", (req, res) => {
+router.post("/:id/sections", validateBody(sectionCreateSchema), (req, res) => {
   const proposal = db.prepare("SELECT id FROM proposals WHERE id = ?").get(req.params.id);
   if (!proposal) return res.status(404).json({ error: "Voorstel niet gevonden" });
   const maxRow = db.prepare("SELECT MAX(sort_order) AS m FROM proposal_sections WHERE proposal_id = ?").get(req.params.id);
@@ -505,7 +561,7 @@ router.post("/:id/sections", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM proposal_sections WHERE id = ?").get(sectionId));
 });
 
-router.put("/sections/:sid", (req, res) => {
+router.put("/sections/:sid", validateBody(sectionUpdateSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM proposal_sections WHERE id = ?").get(req.params.sid);
   if (!current) return res.status(404).json({ error: "Sectie niet gevonden" });
   const params = {
@@ -530,7 +586,7 @@ router.delete("/sections/:sid", (req, res) => {
   res.status(204).end();
 });
 
-router.put("/:id/sections/reorder", (req, res) => {
+router.put("/:id/sections/reorder", validateBody(reorderSchema), (req, res) => {
   const order = Array.isArray(req.body.order) ? req.body.order : [];
   const update = db.prepare("UPDATE proposal_sections SET sort_order = ? WHERE id = ? AND proposal_id = ?");
   const tx = db.transaction(() => {
@@ -552,7 +608,7 @@ router.get("/:id/comments", (req, res) => {
   res.json(db.prepare("SELECT * FROM proposal_comments WHERE proposal_id = ? ORDER BY created_at").all(req.params.id));
 });
 
-router.post("/:id/comments", (req, res) => {
+router.post("/:id/comments", validateBody(commentCreateSchema), (req, res) => {
   const proposal = db.prepare("SELECT id FROM proposals WHERE id = ?").get(req.params.id);
   if (!proposal) return res.status(404).json({ error: "Voorstel niet gevonden" });
   const commentId = id("pcomment");

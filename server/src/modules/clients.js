@@ -2,8 +2,27 @@ const express = require("express");
 const { z } = require("zod");
 const { db } = require("../db/database");
 const { id, parseJson } = require("./utils");
+const { validateBody } = require("./validate");
 
 const router = express.Router();
+
+const contactSchema = z.object({
+  name: z.string().optional(),
+  role: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  notes: z.string().optional(),
+  is_primary: z.any().optional()
+});
+
+const addressSchema = z.object({
+  label: z.string().optional(),
+  street: z.string().optional(),
+  postal_code: z.string().optional(),
+  city: z.string().optional(),
+  country: z.string().optional(),
+  notes: z.string().optional()
+});
 
 const clientSchema = z.object({
   name: z.string().min(1),
@@ -78,7 +97,7 @@ router.delete("/:id", (req, res) => {
   res.status(204).end();
 });
 
-router.post("/:id/contacts", (req, res) => {
+router.post("/:id/contacts", validateBody(contactSchema), (req, res) => {
   const contactId = id("contact");
   db.prepare(`
     INSERT INTO client_contacts (id, client_id, name, role, email, phone, notes, is_primary)
@@ -87,7 +106,7 @@ router.post("/:id/contacts", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM client_contacts WHERE id = ?").get(contactId));
 });
 
-router.put("/contacts/:contactId", (req, res) => {
+router.put("/contacts/:contactId", validateBody(contactSchema, { partial: true }), (req, res) => {
   db.prepare(`
     UPDATE client_contacts SET name = @name, role = @role, email = @email, phone = @phone, notes = @notes, is_primary = @is_primary
     WHERE id = @id
@@ -108,7 +127,7 @@ router.delete("/contacts/:contactId", (req, res) => {
   res.status(204).end();
 });
 
-router.post("/:id/addresses", (req, res) => {
+router.post("/:id/addresses", validateBody(addressSchema), (req, res) => {
   const addressId = id("address");
   db.prepare(`
     INSERT INTO client_addresses (id, client_id, label, street, postal_code, city, country, notes)

@@ -3,8 +3,51 @@ const { db } = require("../db/database");
 const { id, parseJson } = require("./utils");
 const { runCompletion, estimateCost, DEFAULT_MODEL } = require("./aiProvider");
 const { record } = require("./audit");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
+
+// ---- Validation schemas ----------------------------------------------------
+
+const settingsSchema = z.object({
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  enabled: z.any().optional(),
+  privacy_mode: z.any().optional()
+});
+
+const promptSchema = z.object({
+  key: z.string(),
+  name: z.string(),
+  system_prompt: z.string().optional(),
+  user_prompt: z.string().optional(),
+  is_active: z.any().optional()
+});
+
+const promptUpdateSchema = z.object({
+  key: z.string().optional(),
+  name: z.string().optional(),
+  system_prompt: z.string().optional(),
+  user_prompt: z.string().optional(),
+  version: z.coerce.number().int().optional(),
+  is_active: z.any().optional()
+});
+
+const reviewSchema = z.object({
+  review_status: z.enum(["approved", "rejected", "pending"])
+});
+
+const runSchema = z.object({
+  flow: z.enum([
+    "intake_analysis",
+    "proposal_writing",
+    "product_research",
+    "moodboard_analysis",
+    "knowledge_retrieval"
+  ]),
+  project_id: z.string().optional(),
+  input: z.any().optional()
+});
 
 // Supported AI flows. Each maps to a context-builder below.
 const FLOWS = [
@@ -251,7 +294,7 @@ router.get("/settings", (_req, res) => {
   res.json(getSettings());
 });
 
-router.put("/settings", (req, res) => {
+router.put("/settings", validateBody(settingsSchema, { partial: true }), (req, res) => {
   getSettings(); // ensure the singleton exists
   const { provider, model, enabled, privacy_mode } = req.body || {};
   const set = [];
@@ -279,7 +322,7 @@ router.get("/prompts", (req, res) => {
   res.json(rows);
 });
 
-router.post("/prompts", (req, res) => {
+router.post("/prompts", validateBody(promptSchema), (req, res) => {
   const { key, name, system_prompt = "", user_prompt = "", is_active = 1 } = req.body || {};
   if (!key || !name) return res.status(400).json({ error: "key en name zijn verplicht" });
   const maxRow = db.prepare("SELECT MAX(version) AS maxv FROM prompt_templates WHERE key = ?").get(key);
@@ -293,7 +336,7 @@ router.post("/prompts", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM prompt_templates WHERE id = ?").get(promptId));
 });
 
-router.put("/prompts/:id", (req, res) => {
+router.put("/prompts/:id", validateBody(promptUpdateSchema, { partial: true }), (req, res) => {
   const existing = db.prepare("SELECT * FROM prompt_templates WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Prompttemplate niet gevonden" });
   const fields = ["key", "name", "system_prompt", "user_prompt", "version", "is_active"];
@@ -349,7 +392,7 @@ router.delete("/jobs/:id", (req, res) => {
   res.status(204).end();
 });
 
-router.put("/jobs/:id/review", (req, res) => {
+router.put("/jobs/:id/review", validateBody(reviewSchema), (req, res) => {
   const existing = db.prepare("SELECT id FROM ai_jobs WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "AI-job niet gevonden" });
   const review_status = (req.body || {}).review_status;
@@ -365,7 +408,7 @@ router.put("/jobs/:id/review", (req, res) => {
 // Run / regenerate
 // ---------------------------------------------------------------------------
 
-router.post("/run", wrap(async (req, res) => {
+router.post("/run", validateBody(runSchema), wrap(async (req, res) => {
   const { flow, project_id, input } = req.body || {};
   if (!FLOWS.includes(flow)) {
     return res.status(400).json({ error: `Onbekende flow. Kies uit: ${FLOWS.join(", ")}` });

@@ -3,8 +3,30 @@ const { db } = require("../db/database");
 const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { record } = require("./audit");
+const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
+
+const designSchema = z.object({
+  kind: z.string().optional(),
+  title: z.string().min(1),
+  summary: z.string().optional(),
+  body: z.string().optional(),
+  data: z.string().optional(),
+  tags: z.string().optional(),
+  source_project_id: z.string().optional()
+});
+
+// Promote is JSON-only; `data` may arrive as an already-parsed object (serializeData handles both).
+const promoteSchema = z.object({
+  kind: z.string().optional(),
+  title: z.string().min(1),
+  summary: z.string().optional(),
+  body: z.string().optional(),
+  data: z.any().optional(),
+  tags: z.string().optional(),
+  source_project_id: z.string().optional()
+});
 
 // Normalise a stored row into the API shape: parse data_json into `data`
 // and expose a resolvable image_url next to the raw image_path.
@@ -38,7 +60,7 @@ router.get("/", (req, res) => {
   res.json(rows.map(present));
 });
 
-router.post("/", upload.single("image"), (req, res) => {
+router.post("/", upload.single("image"), validateForm(designSchema), (req, res) => {
   const itemId = id("design");
   db.prepare(`
     INSERT INTO design_library (id, kind, title, summary, body, data_json, tags, image_path, source_project_id)
@@ -64,7 +86,7 @@ router.get("/:id", (req, res) => {
   res.json(present(row));
 });
 
-router.put("/:id", upload.single("image"), (req, res) => {
+router.put("/:id", upload.single("image"), validateForm(designSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM design_library WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Bibliotheekitem niet gevonden" });
   db.prepare(`
@@ -106,7 +128,7 @@ router.delete("/:id", (req, res) => {
 
 // Convenience create for promoting something from a project into the library.
 // Same as POST but JSON-only (no image upload).
-router.post("/promote", (req, res) => {
+router.post("/promote", validateBody(promoteSchema), (req, res) => {
   const itemId = id("design");
   db.prepare(`
     INSERT INTO design_library (id, kind, title, summary, body, data_json, tags, image_path, source_project_id)

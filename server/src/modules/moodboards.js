@@ -2,8 +2,49 @@ const express = require("express");
 const { db } = require("../db/database");
 const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
+const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
+
+// ---- Validation schemas ----------------------------------------------------
+
+const boardSchema = z.object({
+  project_id: z.string(),
+  title: z.string(),
+  room_id: z.string().optional(),
+  description: z.string().optional(),
+  colors: z.array(z.any()).optional(),
+  materials: z.array(z.any()).optional(),
+  layout_json: z.any().optional()
+});
+
+// Multipart asset upload (after multer). caption/source_url/tags are strings;
+// sort_order arrives as a string and is coerced to an int.
+const assetUploadSchema = z.object({
+  caption: z.string().optional(),
+  source_url: z.string().optional(),
+  tags: z.string().optional(),
+  sort_order: z.coerce.number().int().optional()
+});
+
+const assetUpdateSchema = z.object({
+  caption: z.string().optional(),
+  source_url: z.string().optional(),
+  tags: z.string().optional(),
+  sort_order: z.coerce.number().int().optional()
+});
+
+const variantSchema = z.object({
+  title: z.string().optional(),
+  variant_label: z.string().optional(),
+  clone_assets: z.any().optional()
+});
+
+const feedbackSchema = z.object({
+  author: z.string().optional(),
+  sentiment: z.enum(["positive", "neutral", "negative"]).optional(),
+  body: z.string().optional()
+});
 
 // Normalise an asset row: parse none, but expose a resolvable url next to file_path.
 function presentAsset(row) {
@@ -40,7 +81,7 @@ router.get("/project/:projectId", (req, res) => {
   res.json(db.prepare("SELECT * FROM moodboards WHERE project_id = ? ORDER BY created_at DESC").all(req.params.projectId).map(hydrate));
 });
 
-router.post("/", (req, res) => {
+router.post("/", validateBody(boardSchema), (req, res) => {
   const boardId = id("moodboard");
   db.prepare(`
     INSERT INTO moodboards (id, project_id, room_id, title, description, colors_json, materials_json)
@@ -58,7 +99,7 @@ router.post("/", (req, res) => {
 });
 
 // Edit a moodboard after creation. Keeps current values when a field is omitted.
-router.put("/:id", (req, res) => {
+router.put("/:id", validateBody(boardSchema, { partial: true }), (req, res) => {
   const current = getBoard(req.params.id);
   if (!current) return res.status(404).json({ error: "Moodboard niet gevonden" });
   db.prepare(`
@@ -91,7 +132,7 @@ router.delete("/:id", (req, res) => {
 
 // Clone a moodboard as a variant of the source. variant_of_id points back to
 // the original; copies title/description/colors/materials and, optionally, assets.
-router.post("/:id/variant", (req, res) => {
+router.post("/:id/variant", validateBody(variantSchema), (req, res) => {
   const source = getBoard(req.params.id);
   if (!source) return res.status(404).json({ error: "Moodboard niet gevonden" });
 
@@ -147,7 +188,7 @@ router.get("/:id/feedback", (req, res) => {
   );
 });
 
-router.post("/:id/feedback", (req, res) => {
+router.post("/:id/feedback", validateBody(feedbackSchema), (req, res) => {
   const board = getBoard(req.params.id);
   if (!board) return res.status(404).json({ error: "Moodboard niet gevonden" });
 
@@ -194,7 +235,7 @@ router.post("/:id/promote", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM design_library WHERE id = ?").get(itemId));
 });
 
-router.post("/:id/assets", upload.single("file"), (req, res) => {
+router.post("/:id/assets", upload.single("file"), validateForm(assetUploadSchema), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Geen bestand ontvangen" });
   const assetId = id("asset");
   db.prepare(`
@@ -214,7 +255,7 @@ router.post("/:id/assets", upload.single("file"), (req, res) => {
 });
 
 // Edit asset metadata: caption, source attribution, tags, ordering.
-router.put("/assets/:assetId", (req, res) => {
+router.put("/assets/:assetId", validateBody(assetUpdateSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM moodboard_assets WHERE id = ?").get(req.params.assetId);
   if (!current) return res.status(404).json({ error: "Asset niet gevonden" });
   db.prepare(`

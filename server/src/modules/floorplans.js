@@ -2,8 +2,51 @@ const express = require("express");
 const { db } = require("../db/database");
 const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
+const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
+
+// ---- Validation schemas ----------------------------------------------------
+
+// Multipart create (after multer). north_angle arrives as a string and is
+// coerced; drawing_json arrives as a JSON string and stays a string.
+const createSchema = z.object({
+  project_id: z.string(),
+  room_id: z.string().optional(),
+  name: z.string().optional(),
+  floor_level: z.string().optional(),
+  north_angle: z.coerce.number().optional(),
+  drawing_json: z.string().optional(),
+  notes: z.string().optional()
+});
+
+const updateSchema = z.object({
+  name: z.string().optional(),
+  room_id: z.string().optional(),
+  floor_level: z.string().optional(),
+  north_angle: z.coerce.number().optional(),
+  drawing_json: z.string().optional(),
+  drawing: z.any().optional(),
+  notes: z.string().optional(),
+  scale_ratio: z.coerce.number().optional(),
+  scale_unit: z.string().optional()
+});
+
+const objectSchema = z.object({
+  layer: z.string().optional(),
+  kind: z.string().optional(),
+  label: z.string().optional(),
+  sort_order: z.coerce.number().int().optional(),
+  geometry: z.any().optional()
+});
+
+const objectUpdateSchema = z.object({
+  layer: z.string().optional(),
+  kind: z.string().optional(),
+  label: z.string().optional(),
+  sort_order: z.coerce.number().int().optional(),
+  geometry: z.any().optional()
+});
 
 function serializePlan(row) {
   if (!row) return row;
@@ -31,7 +74,7 @@ router.get("/:id", (req, res) => {
   res.json(serializePlan(row));
 });
 
-router.post("/", upload.single("file"), (req, res) => {
+router.post("/", upload.single("file"), validateForm(createSchema), (req, res) => {
   const floorplanId = id("floorplan");
   const drawing = req.body.drawing_json || '{"walls":[],"doors":[],"windows":[],"labels":[]}';
   db.prepare(`
@@ -52,7 +95,7 @@ router.post("/", upload.single("file"), (req, res) => {
   res.status(201).json(serializePlan(db.prepare("SELECT * FROM floorplans WHERE id = ?").get(floorplanId)));
 });
 
-router.put("/:id", (req, res) => {
+router.put("/:id", validateBody(updateSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM floorplans WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Floorplan not found" });
 
@@ -109,7 +152,7 @@ router.get("/:id/objects", (req, res) => {
   res.json(rows.map(serializeObject));
 });
 
-router.post("/:id/objects", (req, res) => {
+router.post("/:id/objects", validateBody(objectSchema), (req, res) => {
   const plan = db.prepare("SELECT id FROM floorplans WHERE id = ?").get(req.params.id);
   if (!plan) return res.status(404).json({ error: "Floorplan not found" });
 
@@ -129,7 +172,7 @@ router.post("/:id/objects", (req, res) => {
   res.status(201).json(serializeObject(db.prepare("SELECT * FROM floorplan_objects WHERE id = ?").get(objectId)));
 });
 
-router.put("/objects/:oid", (req, res) => {
+router.put("/objects/:oid", validateBody(objectUpdateSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM floorplan_objects WHERE id = ?").get(req.params.oid);
   if (!current) return res.status(404).json({ error: "Object not found" });
 

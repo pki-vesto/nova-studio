@@ -2,8 +2,24 @@ const express = require("express");
 const { db } = require("../db/database");
 const { id, parseJson } = require("./utils");
 const { record } = require("./audit");
+const { validateBody, z } = require("./validate");
 
 const router = express.Router();
+
+const scenarioSchema = z.object({
+  project_id: z.string().min(1),
+  name: z.string().optional(),
+  lines: z.array(z.object({
+    label: z.string().optional(),
+    amount: z.coerce.number().optional()
+  })).optional(),
+  is_active: z.any().optional()
+});
+
+const roomBudgetSchema = z.object({
+  amount: z.coerce.number().optional(),
+  notes: z.string().optional()
+});
 
 // effectivePrice = sale_price > 0 ? sale_price : price
 const EFFECTIVE_PRICE_SQL = "CASE WHEN COALESCE(p.sale_price, 0) > 0 THEN p.sale_price ELSE COALESCE(p.price, 0) END";
@@ -33,7 +49,7 @@ router.get("/scenarios/project/:pid", (req, res) => {
   res.json(rows.map(serializeScenario));
 });
 
-router.post("/scenarios", (req, res) => {
+router.post("/scenarios", validateBody(scenarioSchema), (req, res) => {
   const scenarioId = id("scenario");
   db.prepare(`
     INSERT INTO budget_scenarios (id, project_id, name, lines_json, is_active)
@@ -49,7 +65,7 @@ router.post("/scenarios", (req, res) => {
   res.status(201).json(serializeScenario(db.prepare("SELECT * FROM budget_scenarios WHERE id = ?").get(scenarioId)));
 });
 
-router.put("/scenarios/:id", (req, res) => {
+router.put("/scenarios/:id", validateBody(scenarioSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM budget_scenarios WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Scenario niet gevonden" });
   db.prepare(`
@@ -100,7 +116,7 @@ router.get("/rooms/project/:pid", (req, res) => {
   res.json(rows);
 });
 
-router.put("/room/:roomId", (req, res) => {
+router.put("/room/:roomId", validateBody(roomBudgetSchema), (req, res) => {
   const amount = Number(req.body.amount || 0);
   const notes = req.body.notes || "";
   const existing = db.prepare("SELECT id FROM room_budgets WHERE room_id = ?").get(req.params.roomId);

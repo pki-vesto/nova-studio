@@ -3,8 +3,33 @@ const { db } = require("../db/database");
 const { id, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { record } = require("./audit");
+const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
+
+const taskSchema = z.object({
+  project_id: z.string().min(1),
+  room_id: z.string().optional(),
+  title: z.string().optional(),
+  status: z.string().optional(),
+  due_date: z.string().optional(),
+  linked_proposal_status: z.string().optional(),
+  sort_order: z.coerce.number().int().optional()
+});
+
+const milestoneSchema = z.object({
+  project_id: z.string().min(1),
+  title: z.string().optional(),
+  target_date: z.string().optional(),
+  done: z.any().optional(),
+  sort_order: z.coerce.number().int().optional()
+});
+
+const documentSchema = z.object({
+  project_id: z.string().min(1),
+  kind: z.string().optional(),
+  title: z.string().optional()
+});
 
 /* ── Tasks ─────────────────────────────────────────────────────────────── */
 
@@ -16,7 +41,7 @@ router.get("/tasks/project/:pid", (req, res) => {
   `).all(req.params.pid));
 });
 
-router.post("/tasks", (req, res) => {
+router.post("/tasks", validateBody(taskSchema), (req, res) => {
   const taskId = id("task");
   db.prepare(`
     INSERT INTO project_tasks (id, project_id, room_id, title, status, due_date, linked_proposal_status, sort_order)
@@ -35,7 +60,7 @@ router.post("/tasks", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM project_tasks WHERE id = ?").get(taskId));
 });
 
-router.put("/tasks/:id", (req, res) => {
+router.put("/tasks/:id", validateBody(taskSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM project_tasks WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Taak niet gevonden" });
   db.prepare(`
@@ -76,7 +101,7 @@ router.get("/milestones/project/:pid", (req, res) => {
   `).all(req.params.pid));
 });
 
-router.post("/milestones", (req, res) => {
+router.post("/milestones", validateBody(milestoneSchema), (req, res) => {
   const milestoneId = id("milestone");
   db.prepare(`
     INSERT INTO project_milestones (id, project_id, title, target_date, done, sort_order)
@@ -93,7 +118,7 @@ router.post("/milestones", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM project_milestones WHERE id = ?").get(milestoneId));
 });
 
-router.put("/milestones/:id", (req, res) => {
+router.put("/milestones/:id", validateBody(milestoneSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM project_milestones WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Mijlpaal niet gevonden" });
   db.prepare(`
@@ -131,7 +156,7 @@ router.get("/documents/project/:pid", (req, res) => {
   res.json(rows);
 });
 
-router.post("/documents", upload.single("file"), (req, res) => {
+router.post("/documents", upload.single("file"), validateForm(documentSchema), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Geen bestand ontvangen" });
   const documentId = id("document");
   db.prepare(`

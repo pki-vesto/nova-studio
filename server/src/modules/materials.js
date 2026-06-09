@@ -2,8 +2,33 @@ const express = require("express");
 const { db } = require("../db/database");
 const { id, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
+const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
+
+const materialSchema = z.object({
+  project_id: z.string().min(1),
+  name: z.string().optional(),
+  spec: z.string().optional(),
+  application: z.string().optional(),
+  sort_order: z.coerce.number().int().optional(),
+  brand: z.string().optional(),
+  code: z.string().optional(),
+  maintenance: z.string().optional(),
+  sustainability_score: z.coerce.number().int().optional(),
+  sample_status: z.enum(["none", "requested", "received"]).optional(),
+  supplier_id: z.string().optional(),
+  library_id: z.string().optional()
+});
+
+const reorderSchema = z.object({
+  order: z.array(z.string()).optional()
+});
+
+const fromLibrarySchema = z.object({
+  project_id: z.string().min(1),
+  library_id: z.string().min(1)
+});
 
 function hydrate(row) {
   if (!row) return null;
@@ -15,7 +40,7 @@ router.get("/project/:projectId", (req, res) => {
   res.json(rows.map(hydrate));
 });
 
-router.post("/", upload.single("image"), (req, res) => {
+router.post("/", upload.single("image"), validateForm(materialSchema), (req, res) => {
   const materialId = id("material");
   db.prepare(`
     INSERT INTO materials (
@@ -46,7 +71,7 @@ router.post("/", upload.single("image"), (req, res) => {
 });
 
 // Materials sorting from UI: { order: [ids] } -> sort_order by index.
-router.put("/reorder", (req, res) => {
+router.put("/reorder", validateBody(reorderSchema), (req, res) => {
   const order = req.body.order;
   if (!Array.isArray(order)) return res.status(400).json({ error: "Ongeldige volgorde" });
   const update = db.prepare("UPDATE materials SET sort_order = ? WHERE id = ?");
@@ -58,7 +83,7 @@ router.put("/reorder", (req, res) => {
 });
 
 // Copy a material_library row into a new project material.
-router.post("/from-library", (req, res) => {
+router.post("/from-library", validateBody(fromLibrarySchema), (req, res) => {
   const { project_id, library_id } = req.body;
   if (!project_id || !library_id) return res.status(400).json({ error: "project_id en library_id zijn verplicht" });
   const lib = db.prepare("SELECT * FROM material_library WHERE id = ?").get(library_id);
@@ -90,7 +115,7 @@ router.post("/from-library", (req, res) => {
   res.status(201).json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(materialId)));
 });
 
-router.put("/:id", upload.single("image"), (req, res) => {
+router.put("/:id", upload.single("image"), validateForm(materialSchema, { partial: true }), (req, res) => {
   const current = db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Materiaal niet gevonden" });
   db.prepare(`
