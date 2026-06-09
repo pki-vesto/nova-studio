@@ -9,8 +9,29 @@ const SUB_TABS = [
   { key: "ai", label: "AI", icon: "spark" },
   { key: "users", label: "Gebruikers", icon: "user" },
   { key: "media", label: "Media", icon: "image" },
+  { key: "backup", label: "Back-up", icon: "download" },
   { key: "activity", label: "Activiteit", icon: "history" }
 ];
+
+function fmtBytes(n) {
+  const b = Number(n || 0);
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// Auth-carrying download (a plain <a download> would omit the bearer token).
+async function downloadFrom(path, name) {
+  const token = (typeof localStorage !== "undefined" && localStorage.getItem("nova.token")) || "";
+  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error(await res.text());
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = name || "download";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
 
 const MODELS = ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-8"];
 const PRIVACY = ["local-first", "cloud-ok"];
@@ -368,6 +389,88 @@ function MediaDrawer({ ctx, item, onClose, onSaved }) {
   );
 }
 
+/* ── Back-up ────────────────────────────────────────────────────────── */
+function BackupTab({ ctx }) {
+  const { fail } = ctx;
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    try { setData(await api.get("/api/backup")); } catch (err) { fail(err); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function makeBackup() {
+    setBusy(true);
+    try { await api.json("/api/backup", "POST", {}); await load(); }
+    catch (err) { fail(err); }
+    finally { setBusy(false); }
+  }
+
+  async function downloadFresh() {
+    setBusy(true);
+    try { await downloadFrom("/api/backup/download", "nova-studio-backup.db"); }
+    catch (err) { fail(err); }
+    finally { setBusy(false); }
+  }
+
+  async function remove(filename) {
+    if (!window.confirm(`Back-up ${filename} verwijderen?`)) return;
+    try { await api.del(`/api/backup/${filename}`); await load(); } catch (err) { fail(err); }
+  }
+
+  if (!data) return <div className="empty"><p className="body" style={{ margin: 0 }}>Laden…</p></div>;
+  const backups = data.backups || [];
+
+  return (
+    <div className="col gap3">
+      <section className="card" style={{ padding: "22px 24px" }}>
+        <Kicker style={{ marginBottom: 10 }}>Database-back-up</Kicker>
+        <p className="body" style={{ margin: "0 0 16px", color: "var(--ink-2)", fontSize: 14 }}>
+          Maak een consistente momentopname van de volledige database. Back-ups worden bewaard in
+          <span className="mono"> {data.dir}</span> (laatste {data.keep} blijven behouden). Plan ze met
+          <span className="mono"> npm run backup</span> via cron, of maak ze hier handmatig.
+        </p>
+        <div className="row gap2 wrap no-print">
+          <button className="btn btn-primary" onClick={makeBackup} disabled={busy}>
+            <Icon name="check" size={15} /> {busy ? "Bezig…" : "Maak back-up nu"}
+          </button>
+          <button className="btn btn-ghost" onClick={downloadFresh} disabled={busy}>
+            <Icon name="download" size={15} /> Download verse back-up
+          </button>
+        </div>
+      </section>
+
+      <section className="card" style={{ padding: "22px 24px" }}>
+        <Kicker style={{ marginBottom: 16 }}>Bestaande back-ups</Kicker>
+        {backups.length === 0 ? (
+          <p className="caption" style={{ color: "var(--ink-2)", margin: 0 }}>Nog geen back-ups gemaakt.</p>
+        ) : (
+          <div className="col gap2">
+            {backups.map((b) => (
+              <div key={b.filename} className="row between middle wrap gap2" style={{ padding: "12px 0", borderTop: "1px solid var(--line)" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div className="mono" style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis" }}>{b.filename}</div>
+                  <div className="caption" style={{ color: "var(--ink-2)" }}>{fmtBytes(b.size)} · {fmtDate(b.created_at)}</div>
+                </div>
+                <div className="row gap2 middle no-print">
+                  <button className="btn btn-ghost" style={{ padding: "6px 10px" }}
+                    onClick={() => downloadFrom(`/api/backup/download/${b.filename}`, b.filename).catch(fail)}>
+                    <Icon name="download" size={13} />
+                  </button>
+                  <button className="btn btn-danger" style={{ padding: "6px 10px" }} onClick={() => remove(b.filename)}>
+                    <Icon name="trash" size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 /* ── Activiteit ─────────────────────────────────────────────────────── */
 function ActivityTab({ ctx }) {
   const { fail } = ctx;
@@ -451,6 +554,7 @@ export function Settings({ ctx }) {
       {tab === "ai" && <AiTab ctx={ctx} />}
       {tab === "users" && <UsersTab ctx={ctx} />}
       {tab === "media" && <MediaTab ctx={ctx} />}
+      {tab === "backup" && <BackupTab ctx={ctx} />}
       {tab === "activity" && <ActivityTab ctx={ctx} />}
     </div>
   );

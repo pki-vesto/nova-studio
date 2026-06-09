@@ -98,7 +98,7 @@ Addendum (validatie-/foutafhandelingsiteratie, 2026-06-09): de gecentraliseerde 
 75. [Completed] Build-check toevoegen aan releaseproces. (`npm run build`)
 76. [Completed] Documentatie-update checklist toevoegen aan README.
 77. [Completed] Schema changelog toevoegen. (`docs/SCHEMA_CHANGELOG.md`)
-78. [Completed] Database backup runbook toevoegen. (`docs/BACKUP_RUNBOOK.md`)
+78. [Completed] Database backup runbook toevoegen. (`docs/BACKUP_RUNBOOK.md` + ingebouwd mechanisme: `backup.js`, `npm run backup`, `/api/backup`, UI)
 79. [Completed] Upload cleanup audit toevoegen. (media-orphans + cleanup)
 80. [Partial] Error states per domeinscherm verbeteren.
 81. [Partial] Empty states per domeinscherm concreter maken.

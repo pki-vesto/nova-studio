@@ -14,7 +14,7 @@ Werkt: React/Vite app-shell met sidebar, topbar, globale zoekinput, projecttabs 
 
 Validatie & foutafhandeling: inputvalidatie is **gecentraliseerd** in `server/src/modules/validate.js` (`validateBody`/`validateForm`-middleware op zod-basis) en toegepast op de write-endpoints van vrijwel alle modules. Gevalideerde waarden worden gecoërceerd en teruggemerged op `req.body`, terwijl onbekende velden en de PUT-diff-checks intact blijven; schema's vermijden `.default()` zodat handler-fallbacks blijven werken. Elke API-fout deelt één envelope `{ error, details? }`. De globale error-handler in `server/src/index.js` mapt `ZodError` → 400 met `details`, multer `LIMIT_FILE_SIZE` → 413 en respecteert `err.status`.
 
-Getest: `npm test` draait util-tests, API-integratietests (`api.test.js`), validatietests (`validate.test.js`) én auth-/RBAC-tests (`auth.test.js`: open single-user modus, 401-afdwinging, whitelist, audit-attributie, member-403). Totaal **20 tests** (3 util + 5 API + 5 validate + 7 auth). `npm run build` is de release-build-check.
+Getest: `npm test` draait util-, API-integratie-, validatie-, auth-/RBAC- én back-uptests. Totaal **22 tests** (3 util + 5 API + 5 validate + 7 auth + 2 backup). `npm run build` is de release-build-check.
 
 Live staat: Docker/Tailscale-config met app-service op poort 4000 en loopback smoke endpoint op 127.0.0.1:4100. Runtime-status niet geverifieerd in deze run.
 
@@ -194,6 +194,14 @@ Getest: geen.
 
 Live staat: geen render-jobs.
 
+### Back-up & herstel
+
+Werkt: ingebouwd back-upmechanisme (`server/src/modules/backup.js`) met consistente online-snapshots via better-sqlite3 `.backup()` (WAL-safe, blokkeert de app niet). Snapshots landen in `./data/backups/` met automatische retentie (`NOVA_BACKUP_KEEP`, default 14). Bereikbaar via `npm run backup` (cron-baar), de API (`POST /api/backup`, `GET /api/backup`, `GET /api/backup/download[/:filename]`, `DELETE /api/backup/:filename` — owner/admin-gated) en de UI (*Instellingen → Back-up*). Eén `.db` per snapshot, direct herstelbaar (zie `BACKUP_RUNBOOK.md`).
+
+Getest: `backup.test.js` — een snapshot is een geldige, openbare SQLite-kopie mét de live data; pruning behoudt alleen de nieuwste N.
+
+Live staat: nog geen back-ups gemaakt op de live instance.
+
 ## Technische Schuld (eerlijk)
 
 - **Authenticatie wordt nu afgedwongen** zodra er gebruikers bestaan (`auth.apiGate`): zonder geldige sessie → 401. RBAC is voorlopig grofkorrelig — élke geauthenticeerde gebruiker heeft volledige toegang tot de domein-API; alleen gebruikersbeheer is rol-gated (`owner`/`admin`). Fijnmazige rol-checks per domein zijn nog niet aanwezig.
@@ -216,5 +224,5 @@ Live staat: geen render-jobs.
 6. **E-mailverzending** voor portaalnotificaties (SMTP/provider) bovenop de bestaande queue.
 7. **Rate-limiting/lockout op login** voor het geval de tailnet-grens wegvalt.
 8. **Bredere automatische tests**: portal-feedbackflow, budgetoverzicht, AI-fallback, render-job.
-9. **Backup/restore** als operationele routine borgen (zie `BACKUP_RUNBOOK.md`).
+9. **Geplande back-ups activeren** op de host (cron → `docker compose exec -T app npm run backup`) en een restore-test draaien (mechanisme is er; routine nog inrichten).
 10. **Documentatie blijven bijwerken** bij elke productwijziging (zie README-checklist).

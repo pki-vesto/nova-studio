@@ -43,9 +43,9 @@ Verantwoordelijkheden: app lifecycle, globale data loading, hash-routing, comman
 
 Datamodellen: geen eigen tabel; gebruikt alle hoofdentiteiten. `schema_migrations` registreert migratiestappen.
 
-Services: `App.jsx`, `api.js`, `Tweaks.jsx`, `primitives.jsx`, Express app bootstrap, `validate.js`, `audit.js`.
+Services: `App.jsx`, `api.js`, `Tweaks.jsx`, `primitives.jsx`, Express app bootstrap, `validate.js`, `audit.js`, `backup.js`.
 
-API's: `GET /api/health`.
+API's: `GET /api/health`. **Back-up** (`backup.js`, owner/admin-gated): `POST /api/backup` (snapshot), `GET /api/backup` (lijst), `GET /api/backup/download[/:filename]` (download), `DELETE /api/backup/:filename`. Consistente online-snapshots via better-sqlite3 `.backup()` naar `./data/backups/` met retentie `NOVA_BACKUP_KEEP`; ook als `npm run backup` (cron). Zie `BACKUP_RUNBOOK.md`.
 
 ### Auth
 
