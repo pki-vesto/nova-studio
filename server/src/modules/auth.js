@@ -11,6 +11,36 @@ const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 dagen
 const ROLES = ["owner", "admin", "member"];
 
 // ---------------------------------------------------------------------------
+// Login brute-force protection. In-memory (resets on restart — fine for a local
+// single-process app): after MAX_ATTEMPTS failures within WINDOW_MS, the key
+// (email + client) is locked for LOCK_MS.
+// ---------------------------------------------------------------------------
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000;
+const LOCK_MS = 15 * 60 * 1000;
+const loginAttempts = new Map();
+
+function attemptKey(req, email) {
+  return `${email}|${req.ip || req.socket?.remoteAddress || ""}`;
+}
+function lockSecondsLeft(key) {
+  const a = loginAttempts.get(key);
+  if (a && a.lockUntil > Date.now()) return Math.ceil((a.lockUntil - Date.now()) / 1000);
+  return 0;
+}
+function recordLoginFailure(key) {
+  const now = Date.now();
+  let a = loginAttempts.get(key);
+  if (!a || now - a.firstAt > WINDOW_MS) a = { count: 0, firstAt: now, lockUntil: 0 };
+  a.count += 1;
+  if (a.count >= MAX_ATTEMPTS) a.lockUntil = now + LOCK_MS;
+  loginAttempts.set(key, a);
+}
+function clearLoginFailures(key) {
+  loginAttempts.delete(key);
+}
+
+// ---------------------------------------------------------------------------
 // Password hashing (Node built-in crypto / scrypt — geen externe provider).
 // ---------------------------------------------------------------------------
 function hashPassword(pw) {
@@ -182,10 +212,19 @@ router.post("/register", (req, res) => {
 router.post("/login", (req, res) => {
   const input = loginSchema.parse(req.body);
   const email = normalizeEmail(input.email);
+  const key = attemptKey(req, email);
+
+  const lockSecs = lockSecondsLeft(key);
+  if (lockSecs > 0) {
+    return res.status(429).json({ error: `Te veel mislukte pogingen. Probeer over ${Math.ceil(lockSecs / 60)} min. opnieuw.` });
+  }
+
   const user = db.prepare("SELECT * FROM users WHERE email = ?").get(email);
   if (!user || !verifyPassword(input.password, user.password_salt, user.password_hash)) {
+    recordLoginFailure(key);
     return res.status(401).json({ error: "Onjuiste inloggegevens" });
   }
+  clearLoginFailures(key);
   const { token } = createSession(user.id);
   record("user", user.id, "login", "", user.id);
   res.json({ token, user: publicUser(user) });

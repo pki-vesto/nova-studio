@@ -14,7 +14,7 @@ Werkt: React/Vite app-shell met sidebar, topbar, globale zoekinput, projecttabs 
 
 Validatie & foutafhandeling: inputvalidatie is **gecentraliseerd** in `server/src/modules/validate.js` (`validateBody`/`validateForm`-middleware op zod-basis) en toegepast op de write-endpoints van vrijwel alle modules. Gevalideerde waarden worden gecoërceerd en teruggemerged op `req.body`, terwijl onbekende velden en de PUT-diff-checks intact blijven; schema's vermijden `.default()` zodat handler-fallbacks blijven werken. Elke API-fout deelt één envelope `{ error, details? }`. De globale error-handler in `server/src/index.js` mapt `ZodError` → 400 met `details`, multer `LIMIT_FILE_SIZE` → 413 en respecteert `err.status`.
 
-Getest: `npm test` draait util-, API-integratie-, validatie-, auth-/RBAC-, back-up-, flow- én notificatietests. Totaal **31 tests** (3 util + 5 API + 5 validate + 7 auth + 2 backup + 6 flows + 3 notificaties). De flow-tests (`flows.test.js`) dekken budget marge/btw-berekening, de portaal-goedkeuringsflow (incl. client-safe lekbescherming), soft-delete, optimistic concurrency (409), product-pricing/CSV en de AI lokale-fallback. `npm run build` is de release-build-check.
+Getest: `npm test` draait util-, API-integratie-, validatie-, auth-/RBAC-, back-up-, flow- én notificatietests. Totaal **32 tests** (3 util + 5 API + 5 validate + 8 auth + 2 backup + 6 flows + 3 notificaties). De flow-tests (`flows.test.js`) dekken budget marge/btw-berekening, de portaal-goedkeuringsflow (incl. client-safe lekbescherming), soft-delete, optimistic concurrency (409), product-pricing/CSV en de AI lokale-fallback. `npm run build` is de release-build-check.
 
 **Notificaties**: portaalreacties (klant keurt product goed/af of laat een opmerking achter) maken nu een in-app notificatie (`notifications`-tabel, `notify()`-helper) die de ontwerper ziet via een **bel met ongelezen-teller in de topbar** + paneel (`App.jsx`). Optioneel e-mailkanaal via een pluggable `mailer.js`: verstuurt alleen wanneer `NOVA_SMTP_URL` is gezet én `nodemailer` is geïnstalleerd, anders blijft de notificatie netjes in-app (geen geforceerde dependency, geen stille fake-send).
 
@@ -158,9 +158,9 @@ Live staat: AI uitgeschakeld; geen jobs.
 
 ### Auth (users/studios/memberships/sessions — optioneel)
 
-Werkt: **`studios` / `users` / `memberships` / `sessions`**. Lokaal scrypt-wachtwoordhashing (Node-crypto, geen externe provider), register/login/logout, sessie-token (30 dagen), gebruikersbeheer (CRUD) en rollen (owner/admin/member). **Afdwinging**: de API-gate (`auth.apiGate`, gemount op `/api`) eist een geldige sessie zodra er één of meer gebruikers bestaan; in single-user modus (0 gebruikers) blijft alles open. De gate whitelist `/api/health`, `/api/auth/*` en de publieke `/api/portal/view/*`. **RBAC**: gebruikersbeheer (`POST/PUT/DELETE /users`) vereist rol `owner`/`admin` (`requireRole`). Beheer via Settings → Gebruikers; login-gate in `App.jsx` en `Login.jsx`.
+Werkt: **`studios` / `users` / `memberships` / `sessions`**. Lokaal scrypt-wachtwoordhashing (Node-crypto, geen externe provider), register/login/logout, sessie-token (30 dagen), gebruikersbeheer (CRUD) en rollen (owner/admin/member). **Afdwinging**: de API-gate (`auth.apiGate`, gemount op `/api`) eist een geldige sessie zodra er één of meer gebruikers bestaan; in single-user modus (0 gebruikers) blijft alles open. De gate whitelist `/api/health`, `/api/auth/*` en de publieke `/api/portal/view/*`. **RBAC**: gebruikersbeheer (`POST/PUT/DELETE /users`) vereist rol `owner`/`admin` (`requireRole`). **Brute-force-bescherming**: 5 mislukte logins per e-mail+client → 15 min lockout (429). De frontend valt bij een 401 mid-sessie (verlopen/ingetrokken token) automatisch terug op de login-gate (`api.js` ruimt de token op en seint `App.jsx`). Beheer via Settings → Gebruikers; login-gate in `App.jsx` en `Login.jsx`.
 
-Getest: `auth.test.js` — open in single-user modus, 401 zonder sessie zodra een gebruiker bestaat, whitelist blijft open, geldige sessie passeert, audit-attributie, en member-403 op gebruikersbeheer.
+Getest: `auth.test.js` — open in single-user modus, 401 zonder sessie zodra een gebruiker bestaat, whitelist blijft open, geldige sessie passeert, audit-attributie, member-403 op gebruikersbeheer, en login brute-force-lockout (429 na 5 mislukte pogingen).
 
 Live staat: geen gebruikers (single-user modus → API open, geen gedragswijziging).
 
@@ -208,7 +208,7 @@ Live staat: nog geen back-ups gemaakt op de live instance.
 
 - **Authenticatie wordt nu afgedwongen** zodra er gebruikers bestaan (`auth.apiGate`): zonder geldige sessie → 401. RBAC is voorlopig grofkorrelig — élke geauthenticeerde gebruiker heeft volledige toegang tot de domein-API; alleen gebruikersbeheer is rol-gated (`owner`/`admin`). Fijnmazige rol-checks per domein zijn nog niet aanwezig.
 - **Ownership-kolommen worden niet afgedwongen.** `projects.studio_id`/`owner_id` bestaan maar worden nog niet gebruikt om data te scopen of te filteren — alle ingelogde gebruikers zien alle projecten. Dit is de volgende stap voor echt multi-tenant gebruik.
-- **Auth zonder rate-limiting op login** (token-based, scrypt). Prima voor lokaal/tailnet; voor publiek internet nog rate-limiting/CSRF/lockout nodig.
+- **Login heeft brute-force-lockout** (5 mislukte pogingen per e-mail+client → 15 min lock, in-memory). Nog open voor publiek internet: CSRF en gedeelde/persistente rate-limit-store bij meerdere processen.
 - **Render is een placeholder-provider** (SVG-label). Er is geen echte beeld-/3D-render; een echte provider plugt in via de adapter.
 - **AI draait alleen live tegen Anthropic als `ANTHROPIC_API_KEY` is gezet** én AI is ingeschakeld; anders een eerlijk lokaal concept. Geen andere providers geïmplementeerd.
 - **E-mailverzending vereist configuratie**: portaalreacties verschijnen altijd in-app (bel + paneel). E-mail wordt alleen verstuurd wanneer `NOVA_SMTP_URL` is gezet én `nodemailer` is geïnstalleerd; anders blijft het bij in-app (`sent = 0`). Bewust geen geforceerde mail-dependency.
@@ -224,7 +224,7 @@ Live staat: nog geen back-ups gemaakt op de live instance.
 4. **Drag-gebaseerde editors** voor moodboard-layout en floorplan-objecten (nu vooral form-based CRUD).
 5. **Accessibility- en responsive-audit** (toetsenbordnavigatie, contrast, mobiel).
 6. **E-mailverzending** voor portaalnotificaties (SMTP/provider) bovenop de bestaande queue.
-7. **Rate-limiting/lockout op login** voor het geval de tailnet-grens wegvalt.
+7. **Frontend e2e-/componenttests** (de UI-laag mist nog automatische dekking; backend-flows zijn gedekt).
 8. **Bredere automatische tests**: portal-feedbackflow, budgetoverzicht, AI-fallback, render-job.
 9. **Geplande back-ups activeren** op de host (cron → `docker compose exec -T app npm run backup`) en een restore-test draaien (mechanisme is er; routine nog inrichten).
 10. **Documentatie blijven bijwerken** bij elke productwijziging (zie README-checklist).

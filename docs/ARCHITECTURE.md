@@ -330,6 +330,6 @@ Live AI: meerdere providers en hardere flows; reviewstatus verankeren in de UI. 
 
 E-mailverzending: SMTP/provider bovenop de bestaande `notifications`-queue (`sent`-vlag).
 
-Auth-hardening: CSRF/rate-limiting en sessiebeheer voor publiek internet (nu prima voor lokaal/tailnet).
+Auth-hardening: login heeft een in-memory brute-force-lockout (5 pogingen → 15 min) en de frontend valt bij 401 terug op de login-gate. Voor publiek internet nog open: CSRF-bescherming en een gedeelde/persistente rate-limit-store bij meerdere processen.
 
 Bredere tests: portal-feedbackflow, budgetoverzicht, AI-fallback, render-job; pagination/filtering-standaard op lijst-endpoints.

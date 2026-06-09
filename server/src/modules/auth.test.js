@@ -80,6 +80,17 @@ test("mutations are attributed to the acting user in the audit log", async () =>
   assert.equal(row.user_id, ownerId, "attributed to the owner");
 });
 
+test("login rate-limiting locks out after repeated failures", async () => {
+  const bad = { email: "brute@studio.nl", password: "fout" };
+  for (let i = 0; i < 5; i++) {
+    const r = await req("/api/auth/login", { method: "POST", body: bad });
+    assert.equal(r.status, 401, `attempt ${i + 1} rejected`);
+  }
+  const locked = await req("/api/auth/login", { method: "POST", body: bad });
+  assert.equal(locked.status, 429, "locked out after 5 failures");
+  assert.match((await locked.json()).error, /Te veel/);
+});
+
 test("RBAC: a member cannot manage users (403)", async () => {
   // Owner creates a member.
   const created = await req("/api/auth/users", { method: "POST", token: ownerToken, body: { name: "Lid", email: "lid@studio.nl", password: "geheim123", role: "member" } });

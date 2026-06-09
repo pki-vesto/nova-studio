@@ -327,6 +327,17 @@ export default function App() {
 
   const authed = !authState.hasUsers || !!authState.user || !!(typeof localStorage !== "undefined" && localStorage.getItem("nova.token"));
 
+  // A 401 mid-session (expired/revoked token) → drop to the login gate.
+  useEffect(() => {
+    function onUnauth() {
+      api.get("/api/auth/status")
+        .then((s) => setAuthState({ ready: true, hasUsers: !!s.hasUsers, user: s.user || null }))
+        .catch(() => setAuthState((st) => ({ ...st, user: null })));
+    }
+    window.addEventListener("nova:unauthorized", onUnauth);
+    return () => window.removeEventListener("nova:unauthorized", onUnauth);
+  }, []);
+
   const openProject = useCallback(async (id, tab = "overview") => {
     setError("");
     try {
