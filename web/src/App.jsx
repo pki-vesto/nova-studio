@@ -125,7 +125,7 @@ function Sidebar({ view, project, onNav, onBrand }) {
   );
 }
 
-function Topbar({ view, project, query, onQuery, onNav, onPresent, onTweaks, onPalette }) {
+function Topbar({ view, project, query, onQuery, onNav, onPresent, onTweaks, onPalette, onBell, notifUnread }) {
   const inProject = view === "project";
   return (
     <div className="topbar">
@@ -144,6 +144,14 @@ function Topbar({ view, project, query, onQuery, onNav, onPresent, onTweaks, onP
           <input placeholder="Zoek projecten, producten…" value={query} onChange={(e) => onQuery(e.target.value)} />
         </div>
         <button className="btn btn-ghost" onClick={onPalette} title="Commando's (⌘K)"><Icon name="search" size={15} /></button>
+        <button className="btn btn-ghost" onClick={onBell} title="Notificaties" style={{ position: "relative" }}>
+          <Icon name="bell" size={15} />
+          {notifUnread > 0 && (
+            <span style={{ position: "absolute", top: 1, right: 1, minWidth: 15, height: 15, padding: "0 3px", borderRadius: 99, background: "var(--clay)", color: "#fff", fontSize: 10, fontWeight: 700, lineHeight: "15px", textAlign: "center" }}>
+              {notifUnread > 9 ? "9+" : notifUnread}
+            </span>
+          )}
+        </button>
         {inProject
           ? <button className="btn btn-primary" onClick={onPresent}><Icon name="present" size={15} /> Presenteer</button>
           : null}
@@ -201,10 +209,45 @@ function CommandPalette({ open, onClose, projects, project, onRun }) {
   );
 }
 
+// Notifications bell panel — surfaces portal reactions and other events so the
+// designer never misses client activity.
+function NotificationsPanel({ open, onClose, items, onRead, onReadAll }) {
+  if (!open) return null;
+  return (
+    <div className="scrim no-print" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="card" style={{ width: "min(440px, 92vw)", margin: "64px 24px 0 auto", padding: 0, overflow: "hidden" }}>
+        <div className="row between middle" style={{ padding: "14px 18px", borderBottom: "1px solid var(--line)" }}>
+          <b className="serif" style={{ fontSize: 19 }}>Notificaties</b>
+          <div className="row gap2 middle">
+            {items.some((n) => !n.read_at) && <button className="btn btn-quiet" style={{ padding: "4px 10px", fontSize: 12 }} onClick={onReadAll}>Alles gelezen</button>}
+            <button className="btn btn-quiet" onClick={onClose} aria-label="Sluiten"><Icon name="close" size={16} /></button>
+          </div>
+        </div>
+        <div style={{ maxHeight: "62vh", overflow: "auto" }}>
+          {items.length === 0 && <div className="caption" style={{ padding: 20 }}>Geen notificaties.</div>}
+          {items.map((n) => (
+            <div key={n.id} onMouseDown={() => onRead(n)}
+              style={{ padding: "12px 18px", borderTop: "1px solid var(--line)", cursor: n.read_at ? "default" : "pointer", background: n.read_at ? "transparent" : "var(--surface-2)" }}>
+              <div className="row between middle gap2">
+                <span className="serif" style={{ fontSize: 15 }}>{n.subject || n.kind || "Notificatie"}</span>
+                {!n.read_at && <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--clay)", flex: "none" }} />}
+              </div>
+              {n.body && <div className="caption" style={{ whiteSpace: "pre-wrap", marginTop: 5, color: "var(--ink-2)", lineHeight: 1.5 }}>{n.body}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
   const [tweaksOpen, setTweaksOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState([]);
+  const [notifUnread, setNotifUnread] = useState(0);
 
   const [view, setView] = useState("projects");
   const [projectTab, setProjectTab] = useState("overview");
@@ -332,6 +375,28 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Notifications — poll the unread count so portal reactions surface promptly.
+  const loadNotifCount = useCallback(async () => {
+    try { const c = await api.get("/api/notifications/count"); setNotifUnread(c.unread || 0); } catch { /* non-fatal */ }
+  }, []);
+  const openNotifs = useCallback(async () => {
+    try { setNotifs(await api.get("/api/notifications?limit=50")); setNotifOpen(true); } catch (err) { fail(err); }
+  }, [fail]);
+  const markRead = useCallback(async (n) => {
+    if (n.read_at) return;
+    try { await api.json(`/api/notifications/${n.id}/read`, "POST", {}); setNotifs((l) => l.map((x) => x.id === n.id ? { ...x, read_at: "now" } : x)); loadNotifCount(); } catch (err) { fail(err); }
+  }, [fail, loadNotifCount]);
+  const markAllRead = useCallback(async () => {
+    try { await api.json("/api/notifications/read-all", "POST", {}); setNotifs((l) => l.map((x) => ({ ...x, read_at: x.read_at || "now" }))); setNotifUnread(0); } catch (err) { fail(err); }
+  }, [fail]);
+
+  useEffect(() => {
+    if (portalToken || !authState.ready || !authed) return;
+    loadNotifCount();
+    const t = setInterval(loadNotifCount, 60000);
+    return () => clearInterval(t);
+  }, [portalToken, authState.ready, authed, loadNotifCount]);
+
   const reload = useCallback(async () => {
     if (project) await loadProject(project.id);
     await loadProjectList();
@@ -411,7 +476,7 @@ export default function App() {
         <Topbar
           view={view} project={project} query={query} onQuery={setQuery}
           onNav={onNav} onPresent={() => setPresent(true)} onTweaks={() => setTweaksOpen((v) => !v)}
-          onPalette={() => setPaletteOpen(true)}
+          onPalette={() => setPaletteOpen(true)} onBell={openNotifs} notifUnread={notifUnread}
         />
         {view === "project" && project && (
           <nav className="proj-nav">
@@ -429,6 +494,8 @@ export default function App() {
       {present && project && <Presentation ctx={ctx} onClose={() => setPresent(false)} />}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} projects={projects} project={project} onRun={runPalette} />
+
+      <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} items={notifs} onRead={markRead} onReadAll={markAllRead} />
 
       <TweaksPanel open={tweaksOpen} onClose={() => setTweaksOpen(false)}>
         <TweakSection label="Sfeer" />

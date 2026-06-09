@@ -26,6 +26,7 @@ const ai = require("./modules/ai");
 const auth = require("./modules/auth");
 const portal = require("./modules/portal");
 const audit = require("./modules/audit");
+const notifications = require("./modules/notifications");
 const backup = require("./modules/backup");
 const { errorBody, zodDetails, isZodError } = require("./modules/validate");
 
@@ -72,6 +73,7 @@ app.use("/api/planning", planning);
 app.use("/api/ai", ai);
 app.use("/api/portal", portal);
 app.use("/api/audit", audit.router);
+app.use("/api/notifications", notifications.router);
 // Backups contain the entire DB (incl. password hashes) — restrict to owner/admin
 // (open in single-user mode where no users exist).
 app.use("/api/backup", auth.requireRole("owner", "admin"), backup.router);

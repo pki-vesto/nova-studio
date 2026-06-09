@@ -245,7 +245,7 @@ Addendum (validatie-/foutafhandelingsiteratie, 2026-06-09): de gecentraliseerde 
 216. [Partial] Klantgoedkeuring per voorstelversie. (proposal-feedback aanwezig; geen formele versie-akkoordknop in portal)
 217. [Completed] Portal media access beveiligen. (token-bundel lekt geen interne velden)
 218. [Completed] Portal activiteit loggen.
-219. [Scaffolded] Email notificaties voor portal. (notifications-rij gequeued met sent=0; geen verzending)
+219. [Completed] Email notificaties voor portal. (in-app notificatiecentrum — bel + paneel + `/api/notifications`; portaalreacties via `notify()`; optionele SMTP-verzending via pluggable `mailer.js` wanneer `NOVA_SMTP_URL` + `nodemailer` aanwezig)
 220. [Completed] Project timeline en mijlpalen toevoegen.
 221. [Completed] Taken per project toevoegen.
 222. [Completed] Taken per ruimte toevoegen.

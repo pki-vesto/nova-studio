@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const { db } = require("../db/database");
 const { id, parseJson, uploadUrl } = require("./utils");
 const { record } = require("./audit");
+const { notify } = require("./notifications");
 const { validateBody, z } = require("./validate");
 
 const router = express.Router();
@@ -234,20 +235,20 @@ router.post("/view/:token/feedback", validateBody(feedbackSchema), (req, res) =>
       ).run(status, body, targetId, row.project_id);
     }
 
-    // Notification scaffolding — queued (sent = 0), no email is actually sent.
-    const subject = `Nieuwe portaalreactie (${targetType}${decision ? ` · ${decision}` : ""})`;
-    const notifBody = [
-      `Project: ${row.project_id}`,
-      `Type: ${targetType}`,
-      targetId ? `Item: ${targetId}` : "",
-      decision ? `Beslissing: ${decision}` : "",
-      body ? `Opmerking: ${body}` : ""
-    ].filter(Boolean).join("\n");
-    db.prepare(
-      "INSERT INTO notifications (id, kind, subject, body, sent) VALUES (?, 'portal', ?, ?, 0)"
-    ).run(id("notif"), subject, notifBody);
   });
   tx();
+
+  // Notify the designer in-app (and by email when SMTP is configured) so portal
+  // reactions never go unseen.
+  const subject = `Nieuwe portaalreactie (${targetType}${decision ? ` · ${decision}` : ""})`;
+  const notifBody = [
+    `Project: ${row.project_id}`,
+    `Type: ${targetType}`,
+    targetId ? `Item: ${targetId}` : "",
+    decision ? `Beslissing: ${decision}` : "",
+    body ? `Opmerking: ${body}` : ""
+  ].filter(Boolean).join("\n");
+  notify({ kind: "portal", subject, body: notifBody, ref_type: "portal_feedback", ref_id: feedbackId });
 
   logActivity(row.token, "feedback", `${targetType}:${targetId || "-"}${decision ? `:${decision}` : ""}`);
   record("portal_feedback", feedbackId, "create", { token: row.token, target_type: targetType, decision });

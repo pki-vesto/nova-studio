@@ -632,6 +632,10 @@ function migrate() {
   addColumn("intake", "risks_json", "TEXT NOT NULL DEFAULT '[]'");
   addColumn("intake", "followups_json", "TEXT NOT NULL DEFAULT '[]'");
 
+  addColumn("notifications", "read_at", "TEXT DEFAULT ''");
+  addColumn("notifications", "ref_type", "TEXT DEFAULT ''");
+  addColumn("notifications", "ref_id", "TEXT DEFAULT ''");
+
   addColumn("projects", "studio_id", "TEXT REFERENCES studios(id) ON DELETE SET NULL");
   addColumn("projects", "owner_id", "TEXT REFERENCES users(id) ON DELETE SET NULL");
   addColumn("projects", "deleted_at", "TEXT DEFAULT ''");

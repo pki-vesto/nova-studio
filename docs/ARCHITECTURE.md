@@ -221,9 +221,11 @@ API's: settings-, prompt-template- en job-/flow-endpoints onder `/api/ai`. Write
 
 ### Client Portal
 
-Verantwoordelijkheden: **magic-link toegang** per project (optioneel aan een proposal gekoppeld, met intrekken/verlopen), een publieke **read-only view** die alleen klant-veilige data toont (geen inkoopprijs/marge/interne secties), **feedback** per sectie/product/voorstel (een product-akkoord/afwijzing wordt teruggeschreven naar de selectie-status) en een **activity-log**. Portaalreacties zetten een rij in `notifications` met `sent = 0` — e-mail is gequeued, niet daadwerkelijk verstuurd.
+Verantwoordelijkheden: **magic-link toegang** per project (optioneel aan een proposal gekoppeld, met intrekken/verlopen), een publieke **read-only view** die alleen klant-veilige data toont (geen inkoopprijs/marge/interne secties), **feedback** per sectie/product/voorstel (een product-akkoord/afwijzing wordt teruggeschreven naar de selectie-status) en een **activity-log**. Portaalreacties lopen via `notifications.notify()` → in-app notificatie (bel + paneel) en optioneel e-mail.
 
-Datamodellen: `portal_access`, `portal_feedback`, `portal_activity`, `notifications`.
+Notificaties: `notifications.js` (`notify()`-helper + `router`) levert in-app notificaties (lijst, ongelezen-teller, mark-read) en een pluggable e-mailkanaal (`mailer.js`, env-gated `NOVA_SMTP_URL` + optioneel `nodemailer`; no-op zonder config). UI: bel met badge in de topbar + paneel (`App.jsx`). API: `GET /api/notifications`, `GET /api/notifications/count`, `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`.
+
+Datamodellen: `portal_access`, `portal_feedback`, `portal_activity`, `notifications` (met `read_at`/`ref_type`/`ref_id`).
 
 Services: `server/src/modules/portal.js`, `web/src/screens/PortalView.jsx` (publiek) + designer-review.
 
