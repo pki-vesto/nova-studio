@@ -234,8 +234,8 @@ Addendum (validatie-/foutafhandelingsiteratie, 2026-06-09): de gecentraliseerde 
 205. [Completed] Login UI bouwen.
 206. [Completed] Session middleware toevoegen. (optioneel, niet-blokkerend)
 207. [Completed] Ownership op hoofdtabellen toevoegen. (kolommen aanwezig; nog niet afgedwongen)
-208. [Not Started] Role based access control implementeren. (rollen bestaan; niet per route afgedwongen)
-209. [Partial] Multi-user auditlog tonen. (auditlog + API; geen dedicated multi-user UI)
+208. [Partial] Role based access control implementeren. (auth afgedwongen zodra gebruikers bestaan via `auth.apiGate`; gebruikersbeheer rol-gated owner/admin; fijnmazige per-domein rol-checks nog niet)
+209. [Completed] Multi-user auditlog tonen. (auditlog + API + Activiteit-scherm; mutaties toegeschreven aan acteur via AsyncLocalStorage)
 210. [Completed] Optimistic concurrency voor projectbewerkingen. (row_version, 409 bij conflict)
 211. [Completed] Klantportaal datamodel ontwerpen.
 212. [Completed] Magic-link toegang voor klanten.

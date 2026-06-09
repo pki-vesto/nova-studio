@@ -49,11 +49,13 @@ API's: `GET /api/health`.
 
 ### Auth
 
-Verantwoordelijkheden: optionele multi-user/studio-laag. Registratie, login, logout, sessietokens (30 dagen), gebruikersbeheer (CRUD) en rollen (owner/admin/member). Lokale scrypt-wachtwoordhashing via Node-crypto, geen externe provider. De sessie-middleware is niet-blokkerend: zolang er geen gebruikers bestaan blijft single-user lokale modus werken.
+Verantwoordelijkheden: optionele multi-user/studio-laag. Registratie, login, logout, sessietokens (30 dagen), gebruikersbeheer (CRUD) en rollen (owner/admin/member). Lokale scrypt-wachtwoordhashing via Node-crypto, geen externe provider.
+
+Afdwinging: `sessionMiddleware` (niet-blokkerend) hangt `req.user` aan. Daarna draait een **API-gate** (`auth.apiGate`, gemount op `/api`) die een geldige sessie eist zodra er één of meer gebruikers bestaan; in single-user modus (0 gebruikers) blijft alles open. De gate whitelist `/api/health`, `/api/auth/*` en de publieke `/api/portal/view/*`. **RBAC**: `requireRole("owner","admin")` op de gebruikersbeheer-routes; overige domeinroutes vereisen (zodra auth aan staat) een geldige sessie maar nog geen specifieke rol. Acteur-attributie loopt via `AsyncLocalStorage` (`audit.runWithUser`) zodat audit-entries een `user_id` krijgen.
 
 Datamodellen: `studios`, `users`, `memberships`, `sessions`.
 
-Services: `server/src/modules/auth.js` (`router` + `sessionMiddleware`), `web/src/App.jsx`, `web/src/screens/Login.jsx`.
+Services: `server/src/modules/auth.js` (`router` + `sessionMiddleware` + `apiGate`/`requireAuth`/`requireRole`), `web/src/App.jsx` (login-gate), `web/src/screens/Login.jsx`.
 
 API's: `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, plus gebruikersbeheer onder `/api/auth/users`. Validatie via inline zod-schema's (register/login/createUser/updateUser).
 
@@ -318,7 +320,7 @@ Validatie & foutafhandeling: gecentraliseerd via `validate.js` met één `{ erro
 
 ## Toekomstige Architectuur
 
-Per-route RBAC: rollen (owner/admin/member) en ownership-kolommen (`projects.studio_id`/`owner_id`) bestaan, maar worden nog niet per route afgedwongen — bewust single-user-vriendelijk. Volgende stap is autorisatie en data-scoping per studio/owner.
+Autorisatie & data-scoping: authenticatie wordt nu afgedwongen zodra er gebruikers bestaan (`auth.apiGate`), en gebruikersbeheer is rol-gated. De volgende stap is **fijnmazige RBAC per domein** en **ownership-scoping**: `projects.studio_id`/`owner_id` benutten zodat gebruikers alleen hun eigen/studio-data zien (nu ziet elke ingelogde gebruiker alles).
 
 Echte render-provider: de adapter is gewired; een echte beeldgeneratie- of 3D-renderer plugt in op de bestaande functie-interface (`PROVIDERS[name]`).
 

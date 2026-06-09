@@ -14,7 +14,7 @@ Werkt: React/Vite app-shell met sidebar, topbar, globale zoekinput, projecttabs 
 
 Validatie & foutafhandeling: inputvalidatie is **gecentraliseerd** in `server/src/modules/validate.js` (`validateBody`/`validateForm`-middleware op zod-basis) en toegepast op de write-endpoints van vrijwel alle modules. Gevalideerde waarden worden gecoërceerd en teruggemerged op `req.body`, terwijl onbekende velden en de PUT-diff-checks intact blijven; schema's vermijden `.default()` zodat handler-fallbacks blijven werken. Elke API-fout deelt één envelope `{ error, details? }`. De globale error-handler in `server/src/index.js` mapt `ZodError` → 400 met `details`, multer `LIMIT_FILE_SIZE` → 413 en respecteert `err.status`.
 
-Getest: `npm test` draait util-tests, API-integratietests (`server/src/modules/api.test.js`: client/project aanmaken, productselectie + shoppingtotaal, voorstel + secties + PDF-export, proposal-statusflow) én validatietests (`server/src/modules/validate.test.js`: envelope-vorm, ZodError-flattening, 400-afwijzing, coërceren/mergen, partial-mode). Totaal **13 tests** (3 util + 5 API + 5 validate). `npm run build` is de release-build-check (niet in deze docs-run uitgevoerd).
+Getest: `npm test` draait util-tests, API-integratietests (`api.test.js`), validatietests (`validate.test.js`) én auth-/RBAC-tests (`auth.test.js`: open single-user modus, 401-afdwinging, whitelist, audit-attributie, member-403). Totaal **20 tests** (3 util + 5 API + 5 validate + 7 auth). `npm run build` is de release-build-check.
 
 Live staat: Docker/Tailscale-config met app-service op poort 4000 en loopback smoke endpoint op 127.0.0.1:4100. Runtime-status niet geverifieerd in deze run.
 
@@ -156,11 +156,11 @@ Live staat: AI uitgeschakeld; geen jobs.
 
 ### Auth (users/studios/memberships/sessions — optioneel)
 
-Werkt: **`studios` / `users` / `memberships` / `sessions`**. Lokaal scrypt-wachtwoordhashing (Node-crypto, geen externe provider), register/login/logout, sessie-token (30 dagen), gebruikersbeheer (CRUD) en rollen (owner/admin/member). **Niet-blokkerende sessie-middleware**: single-user lokale modus blijft werken zolang er geen gebruikers bestaan. Beheer via Settings → Gebruikers; login-gate in `App.jsx` en `Login.jsx`.
+Werkt: **`studios` / `users` / `memberships` / `sessions`**. Lokaal scrypt-wachtwoordhashing (Node-crypto, geen externe provider), register/login/logout, sessie-token (30 dagen), gebruikersbeheer (CRUD) en rollen (owner/admin/member). **Afdwinging**: de API-gate (`auth.apiGate`, gemount op `/api`) eist een geldige sessie zodra er één of meer gebruikers bestaan; in single-user modus (0 gebruikers) blijft alles open. De gate whitelist `/api/health`, `/api/auth/*` en de publieke `/api/portal/view/*`. **RBAC**: gebruikersbeheer (`POST/PUT/DELETE /users`) vereist rol `owner`/`admin` (`requireRole`). Beheer via Settings → Gebruikers; login-gate in `App.jsx` en `Login.jsx`.
 
-Getest: geen automatische test.
+Getest: `auth.test.js` — open in single-user modus, 401 zonder sessie zodra een gebruiker bestaat, whitelist blijft open, geldige sessie passeert, audit-attributie, en member-403 op gebruikersbeheer.
 
-Live staat: geen gebruikers (single-user modus).
+Live staat: geen gebruikers (single-user modus → API open, geen gedragswijziging).
 
 ### Client Portal (magic-link/feedback/activity)
 
@@ -180,9 +180,9 @@ Live staat: leeg.
 
 ### Audit log
 
-Werkt: **`audit_log`** met een dependency-vrije `record()`-helper die door modules na mutaties wordt aangeroepen (proposals, products, budget, AI, render, portal, auth, knowledge…). Globale feed of gefilterd per entity/entity_id voor change-history. Auditing breekt nooit de primaire write.
+Werkt: **`audit_log`** met een dependency-vrije `record()`-helper die door modules na mutaties wordt aangeroepen (proposals, products, budget, AI, render, portal, auth, knowledge…). De acteur (`user_id`) wordt per request vastgelegd via `AsyncLocalStorage` (`runWithUser`), zonder `req` door elke module te hoeven rijgen. Globale feed of gefilterd per entity/entity_id voor change-history. Auditing breekt nooit de primaire write.
 
-Getest: geen.
+Getest: auth-test verifieert dat een geauthenticeerde mutatie aan de juiste gebruiker wordt toegeschreven.
 
 Live staat: log groeit met mutaties.
 
@@ -196,25 +196,25 @@ Live staat: geen render-jobs.
 
 ## Technische Schuld (eerlijk)
 
-- **RBAC is niet per route afgedwongen.** Rollen (owner/admin/member) en ownership-kolommen (`projects.studio_id`/`owner_id`) bestaan, maar de routes controleren ze niet — bewust single-user-vriendelijk. De sessie-middleware blokkeert nooit.
-- **Ownership-kolommen worden niet afgedwongen.** Ze zijn aanwezig maar nog niet gebruikt om data te scopen of te filteren.
+- **Authenticatie wordt nu afgedwongen** zodra er gebruikers bestaan (`auth.apiGate`): zonder geldige sessie → 401. RBAC is voorlopig grofkorrelig — élke geauthenticeerde gebruiker heeft volledige toegang tot de domein-API; alleen gebruikersbeheer is rol-gated (`owner`/`admin`). Fijnmazige rol-checks per domein zijn nog niet aanwezig.
+- **Ownership-kolommen worden niet afgedwongen.** `projects.studio_id`/`owner_id` bestaan maar worden nog niet gebruikt om data te scopen of te filteren — alle ingelogde gebruikers zien alle projecten. Dit is de volgende stap voor echt multi-tenant gebruik.
+- **Auth zonder rate-limiting op login** (token-based, scrypt). Prima voor lokaal/tailnet; voor publiek internet nog rate-limiting/CSRF/lockout nodig.
 - **Render is een placeholder-provider** (SVG-label). Er is geen echte beeld-/3D-render; een echte provider plugt in via de adapter.
 - **AI draait alleen live tegen Anthropic als `ANTHROPIC_API_KEY` is gezet** én AI is ingeschakeld; anders een eerlijk lokaal concept. Geen andere providers geïmplementeerd.
 - **E-mailnotificaties zijn gescaffold**: portaalreacties zetten een rij in `notifications` met `sent = 0`. Er wordt niets daadwerkelijk verstuurd (geen SMTP/provider).
-- **Auth zonder CSRF/rate-limiting**: token-based, prima voor lokaal/tailnet, niet gehard voor publiek internet.
 - **Validatie is nu gecentraliseerd** via `validate.js` en toegepast op de write-endpoints van vrijwel alle modules; alle API-fouten delen het envelope `{ error, details? }`. `projects` en `auth` gebruiken nog eigen inline zod-schema's (`safeParse`) i.p.v. de gedeelde middleware, maar leveren hetzelfde foutcontract.
 - **Testdekking is smal**: util- + kern-API-integratietests; geen frontend-/e2e-/PDF-visual-tests.
 - **Geen pagination/filtering-standaard** op de lijst-endpoints (datasets zijn nog klein).
 
 ## Hoogste Prioriteiten (nu het meest waardevol)
 
-1. **Per-route RBAC afdwingen** zodra multi-user echt gebruikt wordt (rollen + ownership benutten).
+1. **Ownership-scoping**: `projects.owner_id`/`studio_id` benutten om data per gebruiker/studio te filteren (nu ziet elke ingelogde gebruiker alles). Logische vervolgstap op de zojuist afgedwongen auth.
 2. **Echte render-provider** koppelen via de bestaande adapter (beeldgeneratie of 3D).
 3. **Live AI-sleutel** configureren + de flows aanscherpen; reviewstatus in de UI verankeren.
 4. **Drag-gebaseerde editors** voor moodboard-layout en floorplan-objecten (nu vooral form-based CRUD).
 5. **Accessibility- en responsive-audit** (toetsenbordnavigatie, contrast, mobiel).
 6. **E-mailverzending** voor portaalnotificaties (SMTP/provider) bovenop de bestaande queue.
-7. **Ownership-scoping** van projecten en data zodra studio's met meerdere gebruikers in gebruik gaan.
+7. **Rate-limiting/lockout op login** voor het geval de tailnet-grens wegvalt.
 8. **Bredere automatische tests**: portal-feedbackflow, budgetoverzicht, AI-fallback, render-job.
 9. **Backup/restore** als operationele routine borgen (zie `BACKUP_RUNBOOK.md`).
 10. **Documentatie blijven bijwerken** bij elke productwijziging (zie README-checklist).

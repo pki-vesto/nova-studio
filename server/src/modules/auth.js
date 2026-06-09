@@ -84,6 +84,35 @@ function sessionMiddleware(req, _res, next) {
 }
 
 // ---------------------------------------------------------------------------
+// Enforcement. Auth is OFF (open) while no users exist — single-user local mode
+// stays frictionless. Once a user is created, a valid session is required.
+// ---------------------------------------------------------------------------
+function requireAuth(req, res, next) {
+  if (userCount() === 0) return next();
+  if (req.user) return next();
+  return res.status(401).json({ error: "Authenticatie vereist" });
+}
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (userCount() === 0) return next();
+    if (!req.user) return res.status(401).json({ error: "Authenticatie vereist" });
+    if (roles.length && !roles.includes(req.user.role)) {
+      return res.status(403).json({ error: "Onvoldoende rechten" });
+    }
+    next();
+  };
+}
+
+// Mounted at /api: protects every API route except health, the auth endpoints
+// themselves, and the public client-portal view (token IS the credential).
+function apiGate(req, res, next) {
+  const p = req.path;
+  if (p === "/health" || p.startsWith("/auth") || p.startsWith("/portal/view")) return next();
+  return requireAuth(req, res, next);
+}
+
+// ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
 const registerSchema = z.object({
@@ -179,7 +208,7 @@ router.get("/users", (_req, res) => {
   res.json(rows.map(publicUser));
 });
 
-router.post("/users", (req, res) => {
+router.post("/users", requireRole("owner", "admin"), (req, res) => {
   const input = createUserSchema.parse(req.body);
   const email = normalizeEmail(input.email);
   if (db.prepare("SELECT 1 FROM users WHERE email = ?").get(email)) {
@@ -191,7 +220,7 @@ router.post("/users", (req, res) => {
   res.status(201).json(publicUser(user));
 });
 
-router.put("/users/:id", (req, res) => {
+router.put("/users/:id", requireRole("owner", "admin"), (req, res) => {
   const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Gebruiker niet gevonden" });
   const input = updateUserSchema.parse(req.body);
@@ -203,7 +232,7 @@ router.put("/users/:id", (req, res) => {
   res.json(publicUser(db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id)));
 });
 
-router.delete("/users/:id", (req, res) => {
+router.delete("/users/:id", requireRole("owner", "admin"), (req, res) => {
   const existing = db.prepare("SELECT 1 FROM users WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Gebruiker niet gevonden" });
   // sessions + memberships cascade via ON DELETE CASCADE.
@@ -212,4 +241,4 @@ router.delete("/users/:id", (req, res) => {
   res.status(204).end();
 });
 
-module.exports = { router, sessionMiddleware, hashPassword, verifyPassword, publicUser };
+module.exports = { router, sessionMiddleware, requireAuth, requireRole, apiGate, hashPassword, verifyPassword, publicUser };
