@@ -42,7 +42,7 @@ const req = (p, { method = "GET", token, body } = {}) => fetch(`${base}${p}`, {
   body: body ? JSON.stringify(body) : undefined
 });
 
-let ownerToken, memberToken, ownerId;
+let ownerToken, memberToken, adminToken, ownerId, memberId;
 
 test("single-user mode: API is open while no users exist", async () => {
   assert.equal((await req("/api/suppliers")).status, 200, "suppliers open");
@@ -59,6 +59,12 @@ test("registering the first owner enables enforcement", async () => {
 
 test("protected route rejects unauthenticated requests with 401", async () => {
   const res = await req("/api/suppliers");
+  assert.equal(res.status, 401);
+  assert.equal((await res.json()).error, "Authenticatie vereist");
+});
+
+test("user list rejects unauthenticated requests with 401", async () => {
+  const res = await req("/api/auth/users");
   assert.equal(res.status, 401);
   assert.equal((await res.json()).error, "Authenticatie vereist");
 });
@@ -95,9 +101,59 @@ test("RBAC: a member cannot manage users (403)", async () => {
   // Owner creates a member.
   const created = await req("/api/auth/users", { method: "POST", token: ownerToken, body: { name: "Lid", email: "lid@studio.nl", password: "geheim123", role: "member" } });
   assert.equal(created.status, 201);
+  memberId = (await created.json()).id;
   const login = await req("/api/auth/login", { method: "POST", body: { email: "lid@studio.nl", password: "geheim123" } });
   memberToken = (await login.json()).token;
   const forbidden = await req("/api/auth/users", { method: "POST", token: memberToken, body: { name: "X", email: "x@studio.nl", password: "geheim123", role: "member" } });
   assert.equal(forbidden.status, 403);
   assert.equal((await forbidden.json()).error, "Onvoldoende rechten");
+});
+
+test("RBAC: an admin can list users without password material", async () => {
+  const created = await req("/api/auth/users", { method: "POST", token: ownerToken, body: { name: "Admin", email: "admin@studio.nl", password: "geheim123", role: "admin" } });
+  assert.equal(created.status, 201);
+  const login = await req("/api/auth/login", { method: "POST", body: { email: "admin@studio.nl", password: "geheim123" } });
+  adminToken = (await login.json()).token;
+
+  const listed = await req("/api/auth/users", { token: adminToken });
+  assert.equal(listed.status, 200);
+  const users = await listed.json();
+  assert.ok(users.length >= 3);
+  assert.ok(users.every((u) => !("password_hash" in u) && !("password_salt" in u)));
+});
+
+test("RBAC: an admin cannot grant or revoke owner role", async () => {
+  const createOwner = await req("/api/auth/users", { method: "POST", token: adminToken, body: { name: "Nieuwe owner", email: "new-owner@studio.nl", password: "geheim123", role: "owner" } });
+  assert.equal(createOwner.status, 403);
+
+  const promote = await req(`/api/auth/users/${memberId}`, { method: "PUT", token: adminToken, body: { role: "owner" } });
+  assert.equal(promote.status, 403);
+
+  const demote = await req(`/api/auth/users/${ownerId}`, { method: "PUT", token: adminToken, body: { role: "admin" } });
+  assert.equal(demote.status, 403);
+});
+
+test("RBAC: only an owner can grant and revoke owner role", async () => {
+  const promote = await req(`/api/auth/users/${memberId}`, { method: "PUT", token: ownerToken, body: { role: "owner" } });
+  assert.equal(promote.status, 200);
+  assert.equal((await promote.json()).role, "owner");
+
+  const demote = await req(`/api/auth/users/${memberId}`, { method: "PUT", token: ownerToken, body: { role: "member" } });
+  assert.equal(demote.status, 200);
+  assert.equal((await demote.json()).role, "member");
+});
+
+test("lockout guard: the last owner cannot be demoted", async () => {
+  const res = await req(`/api/auth/users/${ownerId}`, { method: "PUT", token: ownerToken, body: { role: "admin" } });
+  assert.equal(res.status, 409);
+});
+
+test("lockout guard: the last owner cannot be deleted", async () => {
+  const res = await req(`/api/auth/users/${ownerId}`, { method: "DELETE", token: adminToken });
+  assert.equal(res.status, 409);
+});
+
+test("lockout guard: users cannot delete their own account", async () => {
+  const res = await req(`/api/auth/users/${ownerId}`, { method: "DELETE", token: ownerToken });
+  assert.equal(res.status, 409);
 });

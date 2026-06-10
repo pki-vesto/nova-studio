@@ -69,6 +69,10 @@ function userCount() {
   return db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
 }
 
+function ownerCount() {
+  return db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'owner'").get().n;
+}
+
 function normalizeRole(role, fallback = "member") {
   return ROLES.includes(role) ? role : fallback;
 }
@@ -134,11 +138,23 @@ function requireRole(...roles) {
   };
 }
 
-// Mounted at /api: protects every API route except health, the auth endpoints
-// themselves, and the public client-portal view (token IS the credential).
+const PUBLIC_AUTH_PATHS = new Set([
+  "/auth/status",
+  "/auth/register",
+  "/auth/login",
+  "/auth/logout",
+  "/auth/me"
+]);
+
+function normalizedApiPath(path) {
+  return path.length > 1 ? path.replace(/\/+$/, "") : path;
+}
+
+// Mounted at /api: protects every API route except health, selected public auth
+// endpoints, and the public client-portal view (token IS the credential).
 function apiGate(req, res, next) {
-  const p = req.path;
-  if (p === "/health" || p.startsWith("/auth") || p.startsWith("/portal/view")) return next();
+  const p = normalizedApiPath(req.path);
+  if (p === "/health" || PUBLIC_AUTH_PATHS.has(p) || p.startsWith("/portal/view")) return next();
   return requireAuth(req, res, next);
 }
 
@@ -242,7 +258,7 @@ router.get("/me", (req, res) => {
 });
 
 // Member management.
-router.get("/users", (_req, res) => {
+router.get("/users", requireRole("owner", "admin"), (_req, res) => {
   const rows = db.prepare("SELECT * FROM users ORDER BY created_at, name").all();
   res.json(rows.map(publicUser));
 });
@@ -254,6 +270,9 @@ router.post("/users", requireRole("owner", "admin"), (req, res) => {
     return res.status(409).json({ error: "E-mailadres is al in gebruik" });
   }
   const role = normalizeRole(input.role, "member");
+  if (userCount() > 0 && role === "owner" && req.user?.role !== "owner") {
+    return res.status(403).json({ error: "Alleen een eigenaar kan de owner-rol toekennen" });
+  }
   const user = insertUser({ name: input.name, email, password: input.password, role });
   record("user", user.id, "create", { role }, req.user ? req.user.id : "");
   res.status(201).json(publicUser(user));
@@ -265,6 +284,13 @@ router.put("/users/:id", requireRole("owner", "admin"), (req, res) => {
   const input = updateUserSchema.parse(req.body);
   const name = "name" in req.body && input.name !== undefined ? input.name : existing.name;
   const role = "role" in req.body ? normalizeRole(input.role, existing.role) : existing.role;
+  const ownerRoleChange = existing.role === "owner" || role === "owner";
+  if (ownerRoleChange && req.user?.role !== "owner") {
+    return res.status(403).json({ error: "Alleen een eigenaar kan de owner-rol wijzigen" });
+  }
+  if (existing.role === "owner" && role !== "owner" && ownerCount() <= 1) {
+    return res.status(409).json({ error: "Laatste eigenaar kan niet worden gedegradeerd" });
+  }
   db.prepare("UPDATE users SET name = ?, role = ? WHERE id = ?").run(name, role, req.params.id);
   db.prepare("UPDATE memberships SET role = ? WHERE user_id = ?").run(role, req.params.id);
   record("user", req.params.id, "update", { name, role }, req.user ? req.user.id : "");
@@ -272,8 +298,14 @@ router.put("/users/:id", requireRole("owner", "admin"), (req, res) => {
 });
 
 router.delete("/users/:id", requireRole("owner", "admin"), (req, res) => {
-  const existing = db.prepare("SELECT 1 FROM users WHERE id = ?").get(req.params.id);
+  const existing = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Gebruiker niet gevonden" });
+  if (req.user?.id === req.params.id) {
+    return res.status(409).json({ error: "Je kunt je eigen account niet verwijderen" });
+  }
+  if (existing.role === "owner" && ownerCount() <= 1) {
+    return res.status(409).json({ error: "Laatste eigenaar kan niet worden verwijderd" });
+  }
   // sessions + memberships cascade via ON DELETE CASCADE.
   db.prepare("DELETE FROM users WHERE id = ?").run(req.params.id);
   record("user", req.params.id, "delete", "", req.user ? req.user.id : "");
