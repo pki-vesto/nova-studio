@@ -3,6 +3,7 @@ const { z } = require("zod");
 const { db } = require("../db/database");
 const { id, parseJson } = require("./utils");
 const { validateBody } = require("./validate");
+const { stampOwnership, visibleOwnedWhere } = require("./authorization");
 
 const router = express.Router();
 
@@ -47,28 +48,31 @@ function hydrate(client) {
 
 router.get("/", (req, res) => {
   const q = `%${req.query.q || ""}%`;
+  const scope = visibleOwnedWhere(req, "c");
   res.json(db.prepare(`
     SELECT c.*, COUNT(p.id) AS project_count, MAX(p.updated_at) AS last_project_at
     FROM clients c
     LEFT JOIN projects p ON p.client_id = c.id
-    WHERE c.name LIKE ? OR c.company LIKE ? OR c.email LIKE ?
+    WHERE (c.name LIKE @q OR c.company LIKE @q OR c.email LIKE @q)
+      AND ${scope.sql}
     GROUP BY c.id
     ORDER BY c.updated_at DESC, c.name
-  `).all(q, q, q).map((row) => ({ ...row, preferences: parseJson(row.preferences_json, {}) })));
+  `).all({ q, ...scope.params }).map((row) => ({ ...row, preferences: parseJson(row.preferences_json, {}) })));
 });
 
 router.post("/", (req, res) => {
   const input = clientSchema.parse(req.body);
   const clientId = id("client");
   db.prepare(`
-    INSERT INTO clients (id, name, company, email, phone, address, notes, preferences_json)
-    VALUES (@id, @name, @company, @email, @phone, @address, @notes, @preferences_json)
-  `).run({ id: clientId, ...input, preferences_json: JSON.stringify(input.preferences || {}) });
+    INSERT INTO clients (id, name, company, email, phone, address, notes, preferences_json, studio_id, owner_id)
+    VALUES (@id, @name, @company, @email, @phone, @address, @notes, @preferences_json, @studio_id, @owner_id)
+  `).run(stampOwnership({ id: clientId, ...input, preferences_json: JSON.stringify(input.preferences || {}), studio_id: null, owner_id: null }, req.user));
   res.status(201).json(hydrate(db.prepare("SELECT * FROM clients WHERE id = ?").get(clientId)));
 });
 
 router.get("/:id", (req, res) => {
-  const client = hydrate(db.prepare("SELECT * FROM clients WHERE id = ?").get(req.params.id));
+  const scope = visibleOwnedWhere(req, "c");
+  const client = hydrate(db.prepare(`SELECT c.* FROM clients c WHERE c.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params }));
   if (!client) return res.status(404).json({ error: "Klant niet gevonden" });
   res.json(client);
 });
@@ -87,7 +91,8 @@ router.put("/:id", (req, res) => {
   if (fields.length) {
     db.prepare(`UPDATE clients SET ${fields.map((field) => `${field} = @${field}`).join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = @id`).run(payload);
   }
-  res.json(hydrate(db.prepare("SELECT * FROM clients WHERE id = ?").get(req.params.id)));
+  const scope = visibleOwnedWhere(req, "c");
+  res.json(hydrate(db.prepare(`SELECT c.* FROM clients c WHERE c.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params })));
 });
 
 router.delete("/:id", (req, res) => {

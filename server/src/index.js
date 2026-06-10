@@ -24,6 +24,7 @@ const render = require("./modules/render");
 const planning = require("./modules/planning");
 const ai = require("./modules/ai");
 const auth = require("./modules/auth");
+const authorization = require("./modules/authorization");
 const portal = require("./modules/portal");
 const audit = require("./modules/audit");
 const notifications = require("./modules/notifications");
@@ -49,6 +50,7 @@ app.use((req, _res, next) => audit.runWithUser(req.user && req.user.id, next));
 // Enforce auth once users exist; open in single-user mode. Whitelists health,
 // selected public auth endpoints, and the public client-portal view.
 app.use("/api", auth.apiGate);
+app.use("/api", authorization.routeGate);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true, dbPath }));
 app.use("/api/auth", auth.router);

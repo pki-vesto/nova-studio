@@ -312,4 +312,4 @@ router.delete("/users/:id", requireRole("owner", "admin"), (req, res) => {
   res.status(204).end();
 });
 
-module.exports = { router, sessionMiddleware, requireAuth, requireRole, apiGate, hashPassword, verifyPassword, publicUser };
+module.exports = { router, sessionMiddleware, requireAuth, requireRole, apiGate, userCount, hashPassword, verifyPassword, publicUser };

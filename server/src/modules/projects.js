@@ -4,6 +4,7 @@ const { db } = require("../db/database");
 const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { seedSampleProject } = require("./seed");
+const { stampOwnership, visibleProjectWhere } = require("./authorization");
 
 const router = express.Router();
 
@@ -51,10 +52,16 @@ function hydrateProject(row) {
   };
 }
 
+function scopedProject(req, projectId) {
+  const scope = visibleProjectWhere(req, "p");
+  return db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: projectId, ...scope.params });
+}
+
 router.get("/", (req, res) => {
   const q = `%${req.query.q || ""}%`;
   const status = req.query.status || "";
   const templates = req.query.templates === "1";
+  const scope = visibleProjectWhere(req, "p");
   const projects = db.prepare(`
     SELECT p.*, c.name AS client_name
     FROM projects p
@@ -63,8 +70,9 @@ router.get("/", (req, res) => {
       AND (@status = '' OR p.status = @status)
       AND p.is_template = @is_template
       AND (p.deleted_at IS NULL OR p.deleted_at = '')
+      AND ${scope.sql}
     ORDER BY p.updated_at DESC
-  `).all({ q, status, is_template: templates ? 1 : 0 });
+  `).all({ q, status, is_template: templates ? 1 : 0, ...scope.params });
   res.json(projects);
 });
 
@@ -74,28 +82,35 @@ router.post("/", (req, res) => {
   const projectId = id("project");
   const tx = db.transaction(() => {
     if (!input.client_id) {
-      db.prepare("INSERT INTO clients (id, name, email, phone, address) VALUES (?, ?, ?, ?, ?)").run(
-        clientId,
-        input.clientName || "Nieuwe klant",
-        input.clientEmail,
-        input.clientPhone,
-        input.address
-      );
+      db.prepare(`
+        INSERT INTO clients (id, name, email, phone, address, studio_id, owner_id)
+        VALUES (@id, @name, @email, @phone, @address, @studio_id, @owner_id)
+      `).run(stampOwnership({
+        id: clientId,
+        name: input.clientName || "Nieuwe klant",
+        email: input.clientEmail,
+        phone: input.clientPhone,
+        address: input.address,
+        studio_id: null,
+        owner_id: null
+      }, req.user));
     }
     db.prepare(`
-      INSERT INTO projects (id, client_id, title, status, is_template, template_name, address, brief, budget_total)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      projectId,
-      clientId,
-      input.title,
-      input.status,
-      input.is_template,
-      input.template_name,
-      input.address,
-      input.brief,
-      input.budget_total
-    );
+      INSERT INTO projects (id, client_id, title, status, is_template, template_name, address, brief, budget_total, studio_id, owner_id)
+      VALUES (@id, @client_id, @title, @status, @is_template, @template_name, @address, @brief, @budget_total, @studio_id, @owner_id)
+    `).run(stampOwnership({
+      id: projectId,
+      client_id: clientId,
+      title: input.title,
+      status: input.status,
+      is_template: input.is_template,
+      template_name: input.template_name,
+      address: input.address,
+      brief: input.brief,
+      budget_total: input.budget_total,
+      studio_id: null,
+      owner_id: null
+    }, req.user));
     db.prepare("INSERT INTO intake (project_id) VALUES (?)").run(projectId);
   });
   tx();
@@ -106,10 +121,12 @@ router.post("/", (req, res) => {
 });
 
 router.get("/:id", (req, res) => {
+  const scope = visibleProjectWhere(req, "p");
   const row = db.prepare(`
     SELECT p.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone, c.notes AS client_notes
-    FROM projects p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id = ?
-  `).get(req.params.id);
+    FROM projects p LEFT JOIN clients c ON c.id = p.client_id
+    WHERE p.id = @id AND ${scope.sql}
+  `).get({ id: req.params.id, ...scope.params });
   if (!row) return res.status(404).json({ error: "Project niet gevonden" });
   res.json(hydrateProject(row));
 });
@@ -149,7 +166,8 @@ router.put("/:id", (req, res) => {
   if (set.length) {
     db.prepare(`UPDATE projects SET ${set.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = @id`).run(params);
   }
-  res.json(hydrateProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id)));
+  const scope = visibleProjectWhere(req, "p");
+  res.json(hydrateProject(db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params })));
 });
 
 // Cover/hero image for the editorial proposal + presentation.
@@ -161,12 +179,18 @@ router.post("/:id/hero", upload.single("image"), (req, res) => {
   if (req.file && current.hero_image_path && current.hero_image_path !== req.file.path) {
     removeUpload(current.hero_image_path);
   }
-  res.json(hydrateProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id)));
+  const scope = visibleProjectWhere(req, "p");
+  res.json(hydrateProject(db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params })));
 });
 
 // Opt-in: populate a fully worked sample project (Herenhuis aan de Keizersgracht).
-router.post("/seed-sample", (_req, res) => {
+router.post("/seed-sample", (req, res) => {
   const projectId = seedSampleProject();
+  const owned = stampOwnership({ studio_id: null, owner_id: null }, req.user);
+  if (owned.owner_id || owned.studio_id) {
+    db.prepare("UPDATE projects SET studio_id = COALESCE(studio_id, @studio_id), owner_id = COALESCE(owner_id, @owner_id) WHERE id = @id")
+      .run({ id: projectId, ...owned });
+  }
   res.status(201).json(hydrateProject(db.prepare(`
     SELECT p.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone
     FROM projects p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id = ?
@@ -175,12 +199,12 @@ router.post("/seed-sample", (_req, res) => {
 
 router.post("/:id/archive", (req, res) => {
   db.prepare("UPDATE projects SET status = 'archived', archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
-  res.json(hydrateProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id)));
+  res.json(hydrateProject(scopedProject(req, req.params.id)));
 });
 
 router.post("/:id/restore", (req, res) => {
   db.prepare("UPDATE projects SET status = 'active', archived_at = '', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
-  res.json(hydrateProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id)));
+  res.json(hydrateProject(scopedProject(req, req.params.id)));
 });
 
 // Soft delete: keep the row, flag it as deleted (recoverable via /undelete).
@@ -188,14 +212,14 @@ router.delete("/:id", (req, res) => {
   const current = db.prepare("SELECT id FROM projects WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Project niet gevonden" });
   db.prepare("UPDATE projects SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
-  res.json(hydrateProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id)));
+  res.json(hydrateProject(scopedProject(req, req.params.id)));
 });
 
 router.post("/:id/undelete", (req, res) => {
   const current = db.prepare("SELECT id FROM projects WHERE id = ?").get(req.params.id);
   if (!current) return res.status(404).json({ error: "Project niet gevonden" });
   db.prepare("UPDATE projects SET deleted_at = '', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
-  res.json(hydrateProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id)));
+  res.json(hydrateProject(scopedProject(req, req.params.id)));
 });
 
 router.post("/:id/duplicate", (req, res) => {
@@ -204,9 +228,18 @@ router.post("/:id/duplicate", (req, res) => {
   const newId = id("project");
   const tx = db.transaction(() => {
     db.prepare(`
-      INSERT INTO projects (id, client_id, title, status, is_template, template_name, address, brief, budget_total)
-      VALUES (?, ?, ?, 'active', 0, '', ?, ?, ?)
-    `).run(newId, source.client_id, req.body.title || `${source.title} kopie`, source.address, source.brief, source.budget_total);
+      INSERT INTO projects (id, client_id, title, status, is_template, template_name, address, brief, budget_total, studio_id, owner_id)
+      VALUES (@id, @client_id, @title, 'active', 0, '', @address, @brief, @budget_total, @studio_id, @owner_id)
+    `).run(stampOwnership({
+      id: newId,
+      client_id: source.client_id,
+      title: req.body.title || `${source.title} kopie`,
+      address: source.address,
+      brief: source.brief,
+      budget_total: source.budget_total,
+      studio_id: source.studio_id || null,
+      owner_id: source.owner_id || null
+    }, req.user));
     const intake = db.prepare("SELECT * FROM intake WHERE project_id = ?").get(source.id);
     if (intake) {
       db.prepare(`
@@ -265,7 +298,7 @@ router.post("/:id/duplicate", (req, res) => {
     });
   });
   tx();
-  res.status(201).json(hydrateProject(db.prepare("SELECT * FROM projects WHERE id = ?").get(newId)));
+  res.status(201).json(hydrateProject(scopedProject(req, newId)));
 });
 
 module.exports = router;

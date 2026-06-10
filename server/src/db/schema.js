@@ -638,6 +638,8 @@ function migrate() {
 
   addColumn("projects", "studio_id", "TEXT REFERENCES studios(id) ON DELETE SET NULL");
   addColumn("projects", "owner_id", "TEXT REFERENCES users(id) ON DELETE SET NULL");
+  addColumn("clients", "studio_id", "TEXT REFERENCES studios(id) ON DELETE SET NULL");
+  addColumn("clients", "owner_id", "TEXT REFERENCES users(id) ON DELETE SET NULL");
   addColumn("projects", "deleted_at", "TEXT DEFAULT ''");
   addColumn("projects", "row_version", "INTEGER NOT NULL DEFAULT 1");
 
