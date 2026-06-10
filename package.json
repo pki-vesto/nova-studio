@@ -12,6 +12,7 @@
     "backup": "node server/src/backup.js",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "smoke": "node --test web/src/**/*.smoke.test.js",
     "test": "node --test server/src/**/*.test.js"
   },
   "keywords": [],
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^9.2.0",
+    "jsdom": "^29.1.1",
     "nodemon": "^3.1.14",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
