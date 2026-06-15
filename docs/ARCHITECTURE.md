@@ -10,7 +10,7 @@ Database: SQLite via `better-sqlite3`. `server/src/db/database.js` gebruikt `NOV
 
 Storage: uploads worden lokaal opgeslagen in `server/uploads` of `NOVA_UPLOAD_DIR`. Bestandsnamen krijgen een gegenereerde ID. Exports worden lokaal opgeslagen in `data/exports` of `NOVA_EXPORT_DIR`. De `media`-tabel houdt metadata bij per upload (mime, alt-tekst, tags, domein/ref) met orphan-detectie en -opruiming.
 
-PDF-engine: PDFKit genereert server-side A4-PDF's in `server/src/modules/proposals.js`. De PDF bundelt project, klant, intake, ruimtes, floorplans, moodboards en productselecties met een editorial cover, per-sectie rendering per audience en appendices wanneer data bestaat.
+PDF-engine: PDFKit genereert server-side A4-PDF's in `server/src/modules/proposals.js`. De PDF bundelt project, klant, intake, ruimtes, floorplans, moodboards en productselecties met een editorial cover, per-sectie rendering per audience en appendices wanneer data bestaat. Dezelfde module biedt ook een **Projectoverdracht-PDF** (`POST /api/proposals/:projectId/handover-pdf`) als bundelend close-out artefact: cover (project + klant) → ruimtes → materialen → geselecteerde producten (zonder inkoopprijs/marge) → index van `project_documents`. Hergebruikt `projectBundle`, `writeSection`, `renderRooms`, `renderTable` en `warn`/`fieldOrWarn`; de bestandsnaam (`<slug>-overdracht-YYYY-MM-DD.pdf`) en cover gebruiken Europe/Amsterdam-datum en de PDF wordt geserveerd via `/exports`.
 
 AI-adapter: `server/src/modules/aiProvider.js` is de providerlaag voor AI-flows. Met `ANTHROPIC_API_KEY` gezet **en** AI ingeschakeld roept hij de Anthropic Messages API aan (Claude); zonder key of bij een mislukte call valt hij terug op een eerlijk, deterministisch lokaal concept dat duidelijk als zodanig is gelabeld. Er wordt nooit stil een modelcall gefaket.
 
@@ -173,13 +173,13 @@ API's: CRUD + image upload onder `/api/design-library`. Writes gevalideerd.
 
 ### Proposals
 
-Verantwoordelijkheden: voorstel CRUD met **configureerbare secties** (`proposal_sections`: kind, titel, body, audience client/internal, aan/uit, volgorde + reorder; standaardsecties worden geseed), **versies** (`/new-version`), **statusflow** (concept → verzonden → geaccepteerd, zet `accepted_at`), **comments per sectie** (`proposal_comments`), **PDF-theming** per audience met appendices en **exportgeschiedenis**.
+Verantwoordelijkheden: voorstel CRUD met **configureerbare secties** (`proposal_sections`: kind, titel, body, audience client/internal, aan/uit, volgorde + reorder; standaardsecties worden geseed), **versies** (`/new-version`), **statusflow** (concept → verzonden → geaccepteerd, zet `accepted_at`), **comments per sectie** (`proposal_comments`), **PDF-theming** per audience met appendices, **exportgeschiedenis** en een **klantveilige Projectoverdracht-PDF** (`/handover-pdf`) als gebundeld close-out artefact (ruimtes, materialen, geselecteerde producten zonder inkoopprijs/marge, en index van `project_documents`).
 
 Datamodellen: `proposals` (incl. `version`, `status`, `summary`, `accepted_at`), `proposal_sections`, `proposal_comments`.
 
 Services: `server/src/modules/proposals.js`, `web/src/screens/Proposal.jsx`, `BudgetBlock.jsx`.
 
-API's: `POST /api/proposals`, `GET /api/proposals/project/:projectId`, `GET/PUT /api/proposals/:id`, `POST /api/proposals/:id/export-pdf`, `/:id/new-version`, `/:id/status`, `/:id/exports`, sectie- en comment-subroutes. Writes gevalideerd.
+API's: `POST /api/proposals`, `GET /api/proposals/project/:projectId`, `GET/PUT /api/proposals/:id`, `POST /api/proposals/:id/export-pdf`, `POST /api/proposals/:projectId/handover-pdf`, `/:id/new-version`, `/:id/status`, `/:id/exports`, sectie- en comment-subroutes. Writes gevalideerd.
 
 ### Budget
 

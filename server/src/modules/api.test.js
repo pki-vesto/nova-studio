@@ -271,6 +271,86 @@ test("product price history capture en surface", async () => {
   assert.equal(missing.status, 404);
 });
 
+// Hex-encode an ASCII string the way PDFKit writes glyphs inside `<...>` TJ
+// hex strings (lowercase). Used to assert text fragments survive into the
+// uncompressed PDF stream, even though kerning gaps split longer runs.
+const asPdfHex = (s) => Buffer.from(s, "utf8").toString("hex");
+
+test("projectoverdracht PDF bundelt ruimtes materialen producten en documenten zonder inkoopdata", async () => {
+  const project = await (await j("/api/projects", "POST", { title: "Overdrachtproject" })).json();
+
+  await j("/api/rooms", "POST", { project_id: project.id, name: "Woonkamer", dimensions: "5x4" });
+  await j("/api/rooms", "POST", { project_id: project.id, name: "Keuken", dimensions: "3x3" });
+
+  db.prepare("INSERT INTO materials (id, project_id, name, spec, application) VALUES (?, ?, ?, ?, ?)")
+    .run("mat_handover_1", project.id, "Travertin tegel", "Gezoet", "Vloer badkamer");
+  db.prepare("INSERT INTO materials (id, project_id, name, spec, application) VALUES (?, ?, ?, ?, ?)")
+    .run("mat_handover_2", project.id, "Eiken hout", "Geolied", "Vloer woonkamer");
+
+  const productA = await (await j("/api/products", "POST", {
+    name: "Bank Sloane", brand: "Studio Nord", price: 4500
+  })).json();
+  const productB = await (await j("/api/products", "POST", { name: "Hanglamp", price: 850 })).json();
+  // Internal-only numerics seeded directly so the client-safe filter is tested in isolation.
+  db.prepare("UPDATE products SET purchase_price = 2222, margin = 1313 WHERE id = ?").run(productA.id);
+
+  await j("/api/products/select", "POST", { project_id: project.id, product_id: productA.id, quantity: 1 });
+  await j("/api/products/select", "POST", { project_id: project.id, product_id: productB.id, quantity: 2 });
+
+  db.prepare("INSERT INTO project_documents (id, project_id, kind, title, file_name) VALUES (?, ?, ?, ?, ?)")
+    .run("doc_handover_1", project.id, "contract", "Ondertekend contract", "contract.pdf");
+
+  const res = await j(`/api/proposals/${project.id}/handover-pdf`, "POST");
+  assert.equal(res.status, 200);
+  const out = await res.json();
+  assert.equal(out.kind, "handover");
+  assert.ok(out.url.startsWith("/exports/"));
+  assert.ok(out.filename.includes("overdracht"));
+  assert.ok(out.filename.endsWith(".pdf"));
+  assert.ok(/\d{4}-\d{2}-\d{2}/.test(out.filename), "filename carries Europe/Amsterdam dated stamp");
+  assert.ok(out.filename.startsWith("overdrachtproject-overdracht-"), "filename slugs the project title");
+
+  const onDisk = path.join(process.env.NOVA_EXPORT_DIR, path.basename(out.path));
+  assert.ok(fs.existsSync(onDisk), "handover PDF written to disk");
+  const pdf = fs.readFileSync(onDisk);
+  assert.equal(pdf.subarray(0, 4).toString("utf8"), "%PDF");
+  assert.ok(pdf.length > 500, "handover PDF is non-trivial");
+
+  // The project title goes into the PDF Info dict as a literal string.
+  assert.ok(pdf.includes(Buffer.from("Overdrachtproject")), "project title rendered in PDF Info dict");
+  // Selected product + document title survive into the page content stream
+  // as hex-encoded glyphs inside `<...>` TJ runs. Use short fragments because
+  // PDFKit splits longer strings on kerning pairs.
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("Bank"))), "selected product glyphs rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("Onder"))), "document index glyphs rendered");
+
+  // Client-safe: purchase_price (2222) and margin (1313) must not leak in any
+  // representation — ASCII (Info dict, metadata) or hex (TJ glyph runs).
+  assert.equal(pdf.includes(Buffer.from("2222")), false, "purchase_price absent (ASCII)");
+  assert.equal(pdf.includes(Buffer.from("1313")), false, "margin absent (ASCII)");
+  assert.equal(pdf.includes(Buffer.from(asPdfHex("2222"))), false, "purchase_price absent (TJ hex)");
+  assert.equal(pdf.includes(Buffer.from(asPdfHex("1313"))), false, "margin absent (TJ hex)");
+});
+
+test("projectoverdracht PDF rendert werkflow-waarschuwingen voor leeg project en geeft 404", async () => {
+  const empty = await (await j("/api/projects", "POST", { title: "Leeg overdrachtproject" })).json();
+  const res = await j(`/api/proposals/${empty.id}/handover-pdf`, "POST");
+  assert.equal(res.status, 200);
+  const out = await res.json();
+  const onDisk = path.join(process.env.NOVA_EXPORT_DIR, path.basename(out.path));
+  const pdf = fs.readFileSync(onDisk);
+  assert.equal(pdf.subarray(0, 4).toString("utf8"), "%PDF");
+  assert.ok(pdf.length > 500, "empty handover PDF is non-trivial");
+  // Workflow-warning text fragments survive into the TJ glyph runs. Searching
+  // for short fragments avoids PDFKit's kerning gaps splitting the run.
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("ruimtes"))), "rooms-warning fragment rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("materialen"))), "materials-warning fragment rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("oducten"))), "products-warning fragment rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("ojectdocumenten"))), "documents-warning fragment rendered");
+
+  assert.equal((await j("/api/proposals/missing-project/handover-pdf", "POST")).status, 404);
+});
+
 test("proposal status flow zet accepted_at", async () => {
   const project = await (await j("/api/projects", "POST", { title: "Statusproject" })).json();
   const proposal = await (await j("/api/proposals", "POST", { project_id: project.id, title: "V" })).json();
