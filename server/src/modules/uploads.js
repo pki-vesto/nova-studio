@@ -15,7 +15,21 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
+function isSafeOriginalName(name) {
+  if (!name || typeof name !== "string") return false;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(name)) return false;
+  if (name.includes("/") || name.includes("\\") || name.includes("..")) return false;
+  return path.basename(name) === name;
+}
+
+function fileFilter(_req, file, cb) {
+  if (isSafeOriginalName(file.originalname)) return cb(null, true);
+  const err = new Error("Ongeldige bestandsnaam");
+  err.status = 400;
+  return cb(err);
+}
+
+const upload = multer({ storage, fileFilter, limits: { fileSize: 25 * 1024 * 1024 } });
 const router = express.Router();
 
 // Best-effort removal of an uploaded file. Confined to uploadDir via basename
@@ -29,7 +43,15 @@ function removeUpload(filePath) {
   }
 }
 
-router.post("/", upload.single("file"), (req, res) => {
+function rejectClientTarget(req, res, next) {
+  const forbiddenFields = ["url", "upload_url", "file_path", "path", "target", "destination"];
+  const supplied = forbiddenFields.find((field) => req.body && req.body[field] !== undefined);
+  if (!supplied) return next();
+  removeUpload(req.file && req.file.path);
+  return res.status(400).json({ error: "Ongeldige uploadbestemming" });
+}
+
+router.post("/", upload.single("file"), rejectClientTarget, (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Geen bestand ontvangen" });
   res.status(201).json({
     file_path: req.file.path,
