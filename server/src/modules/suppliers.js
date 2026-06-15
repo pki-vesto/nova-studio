@@ -1,10 +1,54 @@
 const express = require("express");
+const fs = require("fs");
 const { db } = require("../db/database");
 const { id } = require("./utils");
 const { record } = require("./audit");
-const { validateBody, z } = require("./validate");
+const { upload, removeUpload } = require("./uploads");
+const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
+
+// Local copies of the tiny CSV helpers used by products.js — kept here so the
+// suppliers module stays self-contained and doesn't pull in a CSV dependency.
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  const src = String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  for (let i = 0; i < src.length; i += 1) {
+    const ch = src[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') { field += '"'; i += 1; }
+        else inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field);
+      field = "";
+    } else if (ch === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += ch;
+    }
+  }
+  row.push(field);
+  rows.push(row);
+  return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+}
+
+function computeMargin(salePrice, purchasePrice) {
+  const sale = Number(salePrice || 0);
+  const purchase = Number(purchasePrice || 0);
+  return (sale > 0 && purchase > 0) ? sale - purchase : 0;
+}
 
 const supplierSchema = z.object({
   name: z.string().min(1),
@@ -29,6 +73,10 @@ const contactSchema = z.object({
 const leadTimeSchema = z.object({
   lead_days: z.coerce.number().int().optional(),
   notes: z.string().optional()
+});
+
+const priceListImportSchema = z.object({
+  csv: z.string().optional()
 });
 
 // --- Suppliers --------------------------------------------------------------
@@ -197,6 +245,119 @@ router.get("/:id/lead-times", (req, res) => {
   res.json(db.prepare(
     "SELECT * FROM supplier_lead_times WHERE supplier_id = ? ORDER BY recorded_at DESC, rowid DESC"
   ).all(req.params.id));
+});
+
+// --- Price list import ------------------------------------------------------
+
+// Bulk-import a supplier price list. Matching products (by non-empty SKU) get
+// their prices + supplier_id refreshed; non-matches are inserted as candidates
+// already linked to this supplier. Mirrors the CSV handling in products.js
+// (multipart `file` OR JSON `{ csv }` body) and runs inside one transaction.
+router.post("/:id/import-price-list", upload.single("file"), validateForm(priceListImportSchema), (req, res) => {
+  try {
+    const supplier = db.prepare("SELECT id FROM suppliers WHERE id = ?").get(req.params.id);
+    if (!supplier) return res.status(404).json({ error: "Leverancier niet gevonden" });
+
+    let text = "";
+    if (req.file) {
+      text = fs.readFileSync(req.file.path, "utf8");
+    } else if (req.body && typeof req.body.csv === "string") {
+      text = req.body.csv;
+    }
+    text = String(text || "").trim();
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    if (text) {
+      const rows = parseCsv(text);
+      if (rows.length >= 2) {
+        const header = rows[0].map((c) => c.trim());
+        const idx = {
+          name: header.indexOf("name"),
+          sku: header.indexOf("sku"),
+          purchase_price: header.indexOf("purchase_price"),
+          sale_price: header.indexOf("sale_price"),
+          price: header.indexOf("price"),
+          vat_rate: header.indexOf("vat_rate"),
+          category: header.indexOf("category"),
+          brand: header.indexOf("brand")
+        };
+        const cell = (row, key) => (idx[key] >= 0 ? String(row[idx[key]] ?? "").trim() : "");
+        const numOr = (raw, fallback) => (raw === "" ? Number(fallback) || 0 : Number(raw) || 0);
+
+        const findExisting = db.prepare("SELECT * FROM products WHERE sku = ? AND sku != ''");
+        const insert = db.prepare(`
+          INSERT INTO products (id, name, brand, category, sku, price, purchase_price, sale_price, margin, vat_rate, status, supplier_id)
+          VALUES (@id, @name, @brand, @category, @sku, @price, @purchase_price, @sale_price, @margin, @vat_rate, 'candidate', @supplier_id)
+        `);
+        // AC says "prices + supplier_id" — leave name/brand/category alone so a
+        // partial price list never wipes out existing catalog metadata.
+        const update = db.prepare(`
+          UPDATE products SET
+            price = @price,
+            purchase_price = @purchase_price,
+            sale_price = @sale_price,
+            margin = @margin,
+            vat_rate = @vat_rate,
+            supplier_id = @supplier_id,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = @id
+        `);
+
+        const importAll = db.transaction((dataRows) => {
+          for (const row of dataRows) {
+            const name = cell(row, "name");
+            if (!name) { skipped += 1; continue; }
+            const sku = cell(row, "sku");
+            const existing = sku ? findExisting.get(sku) : null;
+            if (existing) {
+              const purchasePrice = numOr(cell(row, "purchase_price"), existing.purchase_price);
+              const salePrice = numOr(cell(row, "sale_price"), existing.sale_price);
+              const price = numOr(cell(row, "price"), existing.price);
+              const vat = numOr(cell(row, "vat_rate"), existing.vat_rate ?? 21);
+              update.run({
+                id: existing.id,
+                price,
+                purchase_price: purchasePrice,
+                sale_price: salePrice,
+                margin: computeMargin(salePrice, purchasePrice),
+                vat_rate: vat,
+                supplier_id: req.params.id
+              });
+              updated += 1;
+            } else {
+              const purchasePrice = numOr(cell(row, "purchase_price"), 0);
+              const salePrice = numOr(cell(row, "sale_price"), 0);
+              const price = numOr(cell(row, "price"), 0);
+              const vat = numOr(cell(row, "vat_rate"), 21);
+              insert.run({
+                id: id("product"),
+                name,
+                brand: cell(row, "brand"),
+                category: cell(row, "category"),
+                sku,
+                price,
+                purchase_price: purchasePrice,
+                sale_price: salePrice,
+                margin: computeMargin(salePrice, purchasePrice),
+                vat_rate: vat,
+                supplier_id: req.params.id
+              });
+              created += 1;
+            }
+          }
+        });
+        importAll(rows.slice(1));
+      }
+    }
+
+    record("supplier", req.params.id, "price_list_import", { created, updated, skipped });
+    res.json({ created, updated, skipped });
+  } finally {
+    if (req.file) removeUpload(req.file.path);
+  }
 });
 
 module.exports = router;

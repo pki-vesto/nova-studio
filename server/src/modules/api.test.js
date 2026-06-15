@@ -27,6 +27,7 @@ app.use("/api/clients", require("./clients"));
 app.use("/api/projects", require("./projects"));
 app.use("/api/products", require("./products"));
 app.use("/api/proposals", require("./proposals"));
+app.use("/api/suppliers", require("./suppliers"));
 app.use((err, _req, res, _next) => res.status(err.name === "ZodError" ? 400 : 500).json({ error: err.message }));
 
 let base;
@@ -89,4 +90,66 @@ test("proposal status flow zet accepted_at", async () => {
   const updated = await (await j(`/api/proposals/${proposal.id}/status`, "PUT", { status: "accepted" })).json();
   assert.equal(updated.status, "accepted");
   assert.ok(updated.accepted_at && updated.accepted_at !== "", "accepted_at set");
+});
+
+test("supplier price list import: updates SKU-match, creates new as candidate, links supplier", async () => {
+  const supplier = await (await j("/api/suppliers", "POST", { name: "Leverancier X" })).json();
+  assert.match(supplier.id, /^supplier_/);
+
+  // Pre-seed a product whose SKU matches the first CSV row.
+  const seeded = await (await j("/api/products", "POST", { name: "Oude bank", sku: "SKU-A", price: 999 })).json();
+
+  const csv = [
+    "name,sku,purchase_price,sale_price,vat_rate",
+    "Widget A,SKU-A,10,20,21",
+    "Widget B,SKU-B,5,15,21"
+  ].join("\n");
+
+  const res = await j(`/api/suppliers/${supplier.id}/import-price-list`, "POST", { csv });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { created: 1, updated: 1, skipped: 0 });
+
+  const products = await (await j("/api/products")).json();
+
+  const updated = products.find((p) => p.id === seeded.id);
+  assert.ok(updated, "seeded product still present");
+  assert.equal(updated.supplier_id, supplier.id, "supplier_id set on updated product");
+  assert.equal(updated.purchase_price, 10);
+  assert.equal(updated.sale_price, 20);
+  assert.equal(updated.margin, 10, "margin = sale - purchase");
+
+  const created = products.find((p) => p.sku === "SKU-B");
+  assert.ok(created, "new product created from CSV");
+  assert.equal(created.status, "candidate");
+  assert.equal(created.supplier_id, supplier.id);
+  assert.equal(created.sale_price, 15);
+});
+
+test("supplier price list import: unknown supplier returns 404", async () => {
+  const res = await j("/api/suppliers/supplier_does_not_exist/import-price-list", "POST", { csv: "name,sku\nX,Y" });
+  assert.equal(res.status, 404);
+});
+
+test("supplier price list import: empty body returns zero counts", async () => {
+  const supplier = await (await j("/api/suppliers", "POST", { name: "Leeg" })).json();
+  const res = await j(`/api/suppliers/${supplier.id}/import-price-list`, "POST", {});
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { created: 0, updated: 0, skipped: 0 });
+});
+
+test("supplier price list import: emits an audit entry with the counts", async () => {
+  const supplier = await (await j("/api/suppliers", "POST", { name: "Audit-leverancier" })).json();
+  const csv = "name,sku\nNieuw Item,SKU-AUDIT-1\n,SKU-EMPTY\n";
+  const res = await j(`/api/suppliers/${supplier.id}/import-price-list`, "POST", { csv });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { created: 1, updated: 0, skipped: 1 });
+
+  // audit_log persists via the audit module; query through the DB directly here
+  // since the audit router is not mounted in this test app.
+  const { db } = require("../db/database");
+  const entry = db.prepare(
+    "SELECT action, detail FROM audit_log WHERE entity = 'supplier' AND entity_id = ? AND action = 'price_list_import' ORDER BY rowid DESC LIMIT 1"
+  ).get(supplier.id);
+  assert.ok(entry, "audit entry recorded");
+  assert.deepEqual(JSON.parse(entry.detail), { created: 1, updated: 0, skipped: 1 });
 });
