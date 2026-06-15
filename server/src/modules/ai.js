@@ -37,6 +37,10 @@ const reviewSchema = z.object({
   review_status: z.enum(["approved", "rejected", "pending"])
 });
 
+const sectionSchema = z.object({
+  section: z.string()
+});
+
 const runSchema = z.object({
   flow: z.enum([
     "intake_analysis",
@@ -60,6 +64,25 @@ const FLOWS = [
 ];
 
 const REVIEW_STATES = ["approved", "rejected", "pending"];
+
+const PROPOSAL_SECTIONS = [
+  { key: "intro", label: "Introductie" },
+  { key: "style", label: "Stijlrichting" },
+  { key: "rationale", label: "Ontwerpverantwoording" },
+  { key: "next-steps", label: "Vervolgstappen" }
+];
+
+function validProposalSection(value) {
+  const key = String(value || "").trim().toLowerCase();
+  return PROPOSAL_SECTIONS.find((section) => section.key === key || section.label.toLowerCase() === key);
+}
+
+function sectionError(res) {
+  return res.status(400).json({
+    error: "Onbekende sectie",
+    valid_sections: PROPOSAL_SECTIONS.map((section) => section.key)
+  });
+}
 
 const TONE_PRESETS = {
   standaard: { label: "Standaard", instruction: "" },
@@ -134,6 +157,9 @@ function buildContext(flow, bundle, input, tone = "standaard") {
   const sources = [];
   const lines = [];
   const userInput = (input && typeof input === "object" ? input.text || input.vraag || input.notes : input) || "";
+  const section = flow === "proposal_writing" && input && typeof input === "object"
+    ? validProposalSection(input.section)
+    : null;
 
   const project = bundle?.project;
   if (project) {
@@ -180,7 +206,12 @@ function buildContext(flow, bundle, input, tone = "standaard") {
       sources.push({ label: `Producten (${bundle.products.length})`, ref: project ? project.id : "" });
       lines.push(`- Geselecteerde producten: ${bundle.products.map((p) => p.name).join(", ")}`);
     }
-    lines.push("", "Schrijf een warm, redactioneel interieurvoorstel in het Nederlands.");
+    if (section) {
+      lines.push("", `Schrijf uitsluitend de sectie "${section.label}" (${section.key}) in het Nederlands.`);
+      lines.push("Geef alleen de kopij voor deze sectie terug, zonder volledige voorstelstructuur of checklist.");
+    } else {
+      lines.push("", "Schrijf een warm, redactioneel interieurvoorstel in het Nederlands.");
+    }
   } else if (flow === "product_research") {
     lines.push("", "Reeds geselecteerde producten:");
     if (bundle?.products?.length) {
@@ -229,10 +260,20 @@ function buildContext(flow, bundle, input, tone = "standaard") {
     "Je bent de AI-assistent van Nova Studio, een tool voor interieuradvies.",
     "Antwoord altijd in helder, professioneel Nederlands.",
     `Huidige flow: ${flow}.`,
+    section ? `Schrijf uitsluitend de sectie ${section.key}: ${section.label}.` : "",
     tone !== "standaard" ? TONE_PRESETS[tone].instruction : ""
   ].filter(Boolean).join(" ");
 
   return { system, prompt: lines.join("\n"), sources };
+}
+
+function isSectionRun(flow, input) {
+  return flow === "proposal_writing" && input && typeof input === "object" && validProposalSection(input.section);
+}
+
+function withSection(input, section) {
+  const base = input && typeof input === "object" && !Array.isArray(input) ? input : { text: input || "" };
+  return { ...base, section };
 }
 
 // For proposal_writing: append a missing-content checklist + a quality score.
@@ -271,7 +312,7 @@ async function runFlow({ flow, projectId, input, tone }) {
   const result = await runCompletion({ flow, system, prompt, model: settings.model || DEFAULT_MODEL });
   let output = result.text;
 
-  if (flow === "proposal_writing") {
+  if (flow === "proposal_writing" && !isSectionRun(flow, input)) {
     output = proposalReview(bundle, output).text;
   }
 
@@ -446,6 +487,19 @@ router.post("/jobs/:id/regenerate", wrap(async (req, res) => {
   const input = parseJson(source.input_json, {});
   const tone = req.body && typeof req.body.tone === "string" ? req.body.tone : source.tone;
   const job = await runFlow({ flow: source.flow, projectId: source.project_id, input, tone });
+  res.status(201).json(job);
+}));
+
+router.post("/jobs/:id/regenerate-section", validateBody(sectionSchema), wrap(async (req, res) => {
+  const source = db.prepare("SELECT * FROM ai_jobs WHERE id = ?").get(req.params.id);
+  if (!source) return res.status(404).json({ error: "AI-job niet gevonden" });
+  if (source.flow !== "proposal_writing") {
+    return res.status(400).json({ error: "Sectie-regeneratie is alleen beschikbaar voor proposal_writing" });
+  }
+  const section = validProposalSection(req.body.section);
+  if (!section) return sectionError(res);
+  const input = withSection(parseJson(source.input_json, {}), section.key);
+  const job = await runFlow({ flow: source.flow, projectId: source.project_id, input });
   res.status(201).json(job);
 }));
 
