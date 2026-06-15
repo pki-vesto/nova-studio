@@ -294,13 +294,26 @@ function PlanEditDrawer({ ctx, plan, onClose }) {
 
 // Objects/layers editor for a single floorplan. Loads independently of ctx.
 function ObjectsPanel({ ctx, plan }) {
-  const { fail } = ctx;
+  const { fail, project, shopping } = ctx;
   const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ layer: "walls", kind: "wall", label: "" });
+  const [materials, setMaterials] = useState([]);
+  const [form, setForm] = useState({ layer: "walls", kind: "wall", label: "", product_id: "", material_id: "" });
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [editLabel, setEditLabel] = useState("");
+  const [editForm, setEditForm] = useState({ label: "", product_id: "", material_id: "" });
+
+  // Unique products selected for this project, keyed by product_id so the same
+  // product placed in multiple rooms only shows once in the picker.
+  const projectProducts = (() => {
+    const seen = new Map();
+    for (const item of shopping?.items || []) {
+      if (item.product_id && !seen.has(item.product_id)) {
+        seen.set(item.product_id, { id: item.product_id, name: item.name });
+      }
+    }
+    return Array.from(seen.values());
+  })();
 
   async function load() {
     setLoading(true);
@@ -308,6 +321,10 @@ function ObjectsPanel({ ctx, plan }) {
     catch (err) { fail(err); } finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [plan.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!project?.id) return;
+    api.get(`/api/materials/project/${project.id}`).then(setMaterials).catch(() => setMaterials([]));
+  }, [project?.id]);
 
   function pickLayer(layer) {
     setForm((p) => ({ ...p, layer, kind: KIND_BY_LAYER[layer][0] }));
@@ -320,15 +337,24 @@ function ObjectsPanel({ ctx, plan }) {
         kind: form.kind,
         label: form.label.trim() || null,
         geometry: {},
-        sort_order: objects.filter((o) => o.layer === form.layer).length
+        sort_order: objects.filter((o) => o.layer === form.layer).length,
+        product_id: form.product_id || null,
+        material_id: form.material_id || null
       });
-      setForm((p) => ({ ...p, label: "" }));
+      setForm((p) => ({ ...p, label: "", product_id: "", material_id: "" }));
       await load();
     } catch (err) { fail(err); } finally { setBusy(false); }
   }
-  async function saveLabel(oid) {
-    try { await api.json(`/api/floorplans/objects/${oid}`, "PUT", { label: editLabel.trim() || null }); setEditing(null); await load(); }
-    catch (err) { fail(err); }
+  async function saveEdit(oid) {
+    try {
+      await api.json(`/api/floorplans/objects/${oid}`, "PUT", {
+        label: editForm.label.trim() || null,
+        product_id: editForm.product_id || null,
+        material_id: editForm.material_id || null
+      });
+      setEditing(null);
+      await load();
+    } catch (err) { fail(err); }
   }
   async function remove(oid) {
     try { await api.del(`/api/floorplans/objects/${oid}`); await load(); }
@@ -353,6 +379,20 @@ function ObjectsPanel({ ctx, plan }) {
         </Field>
       </div>
       <Field label="Label (optioneel)"><input value={form.label} onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))} placeholder="Bijv. Bank 3-zits" /></Field>
+      <div className="form-grid form-grid-2" style={{ marginTop: 10 }}>
+        <Field label="Gekoppeld product">
+          <select value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
+            <option value="">— geen —</option>
+            {projectProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Gekoppeld materiaal">
+          <select value={form.material_id} onChange={(e) => setForm((p) => ({ ...p, material_id: e.target.value }))}>
+            <option value="">— geen —</option>
+            {materials.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </Field>
+      </div>
       <button type="button" className="btn btn-clay" onClick={add} disabled={busy} style={{ justifyContent: "center", width: "100%", marginTop: 12 }}>
         <Icon name="plus" size={15} /> {busy ? "Bezig…" : "Object toevoegen"}
       </button>
@@ -365,24 +405,49 @@ function ObjectsPanel({ ctx, plan }) {
           <div className="kicker" style={{ marginBottom: 8 }}>{LAYER_LABELS[g.layer]}</div>
           <div className="col gap2">
             {g.items.map((o) => (
-              <div key={o.id} className="row between middle" style={{ padding: "7px 0", borderBottom: "1px solid var(--line)" }}>
+              <div key={o.id} style={{ padding: "7px 0", borderBottom: "1px solid var(--line)" }}>
                 {editing === o.id ? (
-                  <div className="row gap2 middle" style={{ flex: 1 }}>
-                    <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} style={{ flex: 1 }} autoFocus />
-                    <button type="button" className="btn btn-primary" style={{ padding: "6px 9px" }} onClick={() => saveLabel(o.id)}><Icon name="check" size={13} /></button>
-                    <button type="button" className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => setEditing(null)}><Icon name="close" size={13} /></button>
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <strong style={{ fontSize: 14 }}>{o.label || o.kind}</strong>
-                      <span className="caption" style={{ marginLeft: 8 }}>{o.kind}</span>
+                  <div className="col gap2">
+                    <input value={editForm.label} onChange={(e) => setEditForm((p) => ({ ...p, label: e.target.value }))} placeholder="Label" autoFocus />
+                    <div className="form-grid form-grid-2">
+                      <Field label="Product">
+                        <select value={editForm.product_id} onChange={(e) => setEditForm((p) => ({ ...p, product_id: e.target.value }))}>
+                          <option value="">— geen —</option>
+                          {projectProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          {/* Keep the existing link visible even when it's no longer in the project selection. */}
+                          {editForm.product_id && !projectProducts.some((p) => p.id === editForm.product_id) && (
+                            <option value={editForm.product_id}>{o.product_name || editForm.product_id}</option>
+                          )}
+                        </select>
+                      </Field>
+                      <Field label="Materiaal">
+                        <select value={editForm.material_id} onChange={(e) => setEditForm((p) => ({ ...p, material_id: e.target.value }))}>
+                          <option value="">— geen —</option>
+                          {materials.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                          {editForm.material_id && !materials.some((m) => m.id === editForm.material_id) && (
+                            <option value={editForm.material_id}>{o.material_name || editForm.material_id}</option>
+                          )}
+                        </select>
+                      </Field>
                     </div>
                     <div className="row gap2">
-                      <button type="button" className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => { setEditing(o.id); setEditLabel(o.label || ""); }}><Icon name="edit" size={13} /></button>
+                      <button type="button" className="btn btn-primary" style={{ padding: "6px 9px" }} onClick={() => saveEdit(o.id)}><Icon name="check" size={13} /> Opslaan</button>
+                      <button type="button" className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => setEditing(null)}><Icon name="close" size={13} /> Annuleren</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="row between middle">
+                    <div>
+                      <strong style={{ fontSize: 14 }}>{o.product_name || o.material_name || o.label || o.kind}</strong>
+                      <span className="caption" style={{ marginLeft: 8 }}>
+                        {[o.kind, o.product_name && "product", o.material_name && "materiaal"].filter(Boolean).join(" · ")}
+                      </span>
+                    </div>
+                    <div className="row gap2">
+                      <button type="button" className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => { setEditing(o.id); setEditForm({ label: o.label || "", product_id: o.product_id || "", material_id: o.material_id || "" }); }}><Icon name="edit" size={13} /></button>
                       <button type="button" className="btn btn-danger" style={{ padding: "6px 9px" }} onClick={() => remove(o.id)}><Icon name="trash" size={13} /></button>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             ))}

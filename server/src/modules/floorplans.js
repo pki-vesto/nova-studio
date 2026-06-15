@@ -33,12 +33,18 @@ const updateSchema = z.object({
   scale_unit: z.string().optional()
 });
 
+// product_id / material_id: optional, may be cleared by sending ""/null.
+// The empty-string → null coercion keeps the FK valid (no empty-string IDs).
+const linkRef = z.union([z.string(), z.null()]).optional();
+
 const objectSchema = z.object({
   layer: z.string().optional(),
   kind: z.string().optional(),
   label: z.string().optional(),
   sort_order: z.coerce.number().int().optional(),
-  geometry: z.any().optional()
+  geometry: z.any().optional(),
+  product_id: linkRef,
+  material_id: linkRef
 });
 
 const objectUpdateSchema = z.object({
@@ -46,7 +52,9 @@ const objectUpdateSchema = z.object({
   kind: z.string().optional(),
   label: z.string().optional(),
   sort_order: z.coerce.number().int().optional(),
-  geometry: z.any().optional()
+  geometry: z.any().optional(),
+  product_id: linkRef,
+  material_id: linkRef
 });
 
 function serializePlan(row) {
@@ -61,7 +69,20 @@ function serializePlan(row) {
 
 function serializeObject(row) {
   if (!row) return row;
-  return { ...row, geometry: parseJson(row.geometry_json, {}) };
+  return {
+    ...row,
+    geometry: parseJson(row.geometry_json, {}),
+    product_id: row.product_id || null,
+    material_id: row.material_id || null,
+    product_name: row.product_name || null,
+    material_name: row.material_name || null
+  };
+}
+
+function normalizeLink(value) {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed ? trimmed : null;
 }
 
 router.get("/project/:projectId", (req, res) => {
@@ -151,9 +172,16 @@ router.delete("/:id", (req, res) => {
 
 // --- Floorplan vector objects (layers: walls / furniture / annotations) ---
 
+const OBJECT_SELECT = `
+  SELECT fo.*, p.name AS product_name, m.name AS material_name
+  FROM floorplan_objects fo
+  LEFT JOIN products p ON p.id = fo.product_id
+  LEFT JOIN materials m ON m.id = fo.material_id
+`;
+
 router.get("/:id/objects", (req, res) => {
   const rows = db.prepare(
-    "SELECT * FROM floorplan_objects WHERE floorplan_id = ? ORDER BY layer, sort_order"
+    `${OBJECT_SELECT} WHERE fo.floorplan_id = ? ORDER BY fo.layer, fo.sort_order`
   ).all(req.params.id);
   res.json(rows.map(serializeObject));
 });
@@ -164,8 +192,8 @@ router.post("/:id/objects", validateBody(objectSchema), (req, res) => {
 
   const objectId = id("fpobj");
   db.prepare(`
-    INSERT INTO floorplan_objects (id, floorplan_id, layer, kind, geometry_json, label, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO floorplan_objects (id, floorplan_id, layer, kind, geometry_json, label, sort_order, product_id, material_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     objectId,
     req.params.id,
@@ -173,9 +201,11 @@ router.post("/:id/objects", validateBody(objectSchema), (req, res) => {
     req.body.kind || "wall",
     JSON.stringify(req.body.geometry || {}),
     req.body.label || null,
-    Number(req.body.sort_order || 0)
+    Number(req.body.sort_order || 0),
+    normalizeLink(req.body.product_id),
+    normalizeLink(req.body.material_id)
   );
-  res.status(201).json(serializeObject(db.prepare("SELECT * FROM floorplan_objects WHERE id = ?").get(objectId)));
+  res.status(201).json(serializeObject(db.prepare(`${OBJECT_SELECT} WHERE fo.id = ?`).get(objectId)));
 });
 
 router.put("/objects/:oid", validateBody(objectUpdateSchema, { partial: true }), (req, res) => {
@@ -195,7 +225,9 @@ router.put("/objects/:oid", validateBody(objectUpdateSchema, { partial: true }),
       kind = @kind,
       geometry_json = @geometry_json,
       label = @label,
-      sort_order = @sort_order
+      sort_order = @sort_order,
+      product_id = @product_id,
+      material_id = @material_id
     WHERE id = @id
   `).run({
     id: req.params.oid,
@@ -203,9 +235,11 @@ router.put("/objects/:oid", validateBody(objectUpdateSchema, { partial: true }),
     kind: req.body.kind !== undefined ? req.body.kind : current.kind,
     geometry_json: geometryJson,
     label: req.body.label !== undefined ? (req.body.label || null) : current.label,
-    sort_order: req.body.sort_order !== undefined ? Number(req.body.sort_order || 0) : current.sort_order
+    sort_order: req.body.sort_order !== undefined ? Number(req.body.sort_order || 0) : current.sort_order,
+    product_id: "product_id" in req.body ? normalizeLink(req.body.product_id) : current.product_id,
+    material_id: "material_id" in req.body ? normalizeLink(req.body.material_id) : current.material_id
   });
-  res.json(serializeObject(db.prepare("SELECT * FROM floorplan_objects WHERE id = ?").get(req.params.oid)));
+  res.json(serializeObject(db.prepare(`${OBJECT_SELECT} WHERE fo.id = ?`).get(req.params.oid)));
 });
 
 router.delete("/objects/:oid", (req, res) => {
@@ -250,8 +284,8 @@ router.post("/:id/new-version", (req, res) => {
 
     const objects = db.prepare("SELECT * FROM floorplan_objects WHERE floorplan_id = ?").all(req.params.id);
     const insertObj = db.prepare(`
-      INSERT INTO floorplan_objects (id, floorplan_id, layer, kind, geometry_json, label, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO floorplan_objects (id, floorplan_id, layer, kind, geometry_json, label, sort_order, product_id, material_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const obj of objects) {
       insertObj.run(
@@ -261,7 +295,9 @@ router.post("/:id/new-version", (req, res) => {
         obj.kind,
         obj.geometry_json,
         obj.label,
-        obj.sort_order
+        obj.sort_order,
+        obj.product_id || null,
+        obj.material_id || null
       );
     }
   });

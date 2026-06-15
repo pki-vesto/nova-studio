@@ -102,6 +102,7 @@ Geregistreerd in `schema_migrations` als **`2026-06-09-platform-expansion`**.
 - **`moodboards`**: `variant_of_id`, `variant_label`, `layout_json`.
 - **`moodboard_assets`**: `source_url`, `tags`, `sort_order`.
 - **`floorplans`**: `scale_ratio`, `scale_unit`, `version`, `thumb_path`.
+- **`floorplan_objects`**: `product_id` (FK → `products.id`, `ON DELETE SET NULL`), `material_id` (FK → `materials.id`, `ON DELETE SET NULL`) — optionele koppeling van een geplaatst object aan een geselecteerd product en/of materiaal (toegevoegd 2026-06-15).
 - **`intake`**: `scope_estimate`, `risks_json`, `followups_json`.
 - **`projects`**: `studio_id`, `owner_id`, `deleted_at` (soft-delete), `row_version` (optimistic concurrency).
 - **`clients`**: `studio_id`, `owner_id` voor ownership-scoping naast projectownership.

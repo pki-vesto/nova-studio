@@ -301,7 +301,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 270. [Completed] AI proposal quality score. (in proposal_writing)
 271. [Completed] Floorplan geometry normaliseren. (geometry_json per object)
 272. [Completed] Floorplan object placement schema. (floorplan_objects op lagen)
-273. [Not Started] Material/product placement koppeling.
+273. [Completed] Material/product placement koppeling. (`floorplan_objects.product_id` / `material_id` met ON DELETE SET NULL, picker in object-editor)
 274. [Completed] Render job tabel.
 275. [Completed] Render output storage. (output_path in uploads)
 276. [Scaffolded] Render provider adapter. (pluggable adapter; alleen placeholder-provider die SVG-label schrijft)
