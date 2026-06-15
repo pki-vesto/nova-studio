@@ -174,8 +174,10 @@ test("material sample workflow request receive reset en dashboard", async () => 
 
   const auditRequest = db.prepare("SELECT * FROM audit_log WHERE entity = 'material' AND entity_id = ? AND action = 'sample_request'").get(material.id);
   const auditReceive = db.prepare("SELECT * FROM audit_log WHERE entity = 'material' AND entity_id = ? AND action = 'sample_receive'").get(material.id);
+  const auditReset = db.prepare("SELECT * FROM audit_log WHERE entity = 'material' AND entity_id = ? AND action = 'sample_reset'").get(material.id);
   assert.ok(auditRequest);
   assert.ok(auditReceive);
+  assert.ok(auditReset);
   assert.equal((await j("/api/materials/project/missing-project/sample-dashboard")).status, 404);
 });
 
