@@ -266,8 +266,8 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 235. [Partial] Material sample ordering workflow. (sample_status-veld; geen bestelflow)
 236. [Partial] Material sample status dashboard. (status zichtbaar in Material Library; geen dashboard)
 237. [Completed] Color palette comparison tool. (Color Library + per-room toepassingen)
-238. [Partial] Room specification sheet. (roomvelden + appendices; geen aparte spec-sheet-export)
-239. [Not Started] Room finish schedule.
+238. [Completed] Room specification sheet. (`GET /api/rooms/:id/finish-schedule` bundelt ruimte + `room_colors` + projectmaterialen + notities; UI-paneel + PDF-export in FloorPlan)
+239. [Completed] Room finish schedule. (Afwerkstaat: A4 PDF via `POST /api/rooms/:id/finish-schedule.pdf` met kleuren-/materialen-/notitiesblok, contractor-veilig zonder inkoopprijs/marge)
 240. [Partial] Installation notes per room. (designer_notes; geen aparte installatie-sectie)
 241. [Partial] Project handover package. (documenten + PDF; geen gebundelde handover-export)
 242. [Completed] Knowledge nodes tabel.

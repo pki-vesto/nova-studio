@@ -1,6 +1,6 @@
 # Nova Studio Current State
 
-Laatst bijgewerkt: 2026-06-10 (na RBAC-/ownership-enforcement).
+Laatst bijgewerkt: 2026-06-15 (na room finish schedule / Afwerkstaat-export).
 
 Bronnen: code-inspectie van `/home/peter/nova-studio` — SQLite-schema (`server/src/db/schema.js`), Express-routes (`server/src/index.js` + `server/src/modules/*`), frontendschermen (`web/src/screens/*`, `web/src/App.jsx`), Docker-config en `npm test` (util- en API-integratietests).
 
@@ -46,9 +46,9 @@ Live staat: lokale DB bevat 1 intake.
 
 ### Rooms
 
-Werkt: ruimtes aanmaken/bewerken/verwijderen, room-images uploaden, hiërarchische parent-room, concept- en sfeerbeeldvelden, sortering. Beheerd vanuit het Plattegrond-/ColorMaterial-scherm.
+Werkt: ruimtes aanmaken/bewerken/verwijderen, room-images uploaden, hiërarchische parent-room, concept- en sfeerbeeldvelden, sortering. Beheerd vanuit het Plattegrond-/ColorMaterial-scherm. **Afwerkstaat per ruimte** (`GET /api/rooms/:id/finish-schedule` levert een bundle met ruimte, project, toegepaste `room_colors` mét library-resolutie, projectmaterialen en notities; `POST /api/rooms/:id/finish-schedule.pdf` genereert een A4 PDF voor de aannemer in `data/exports`, contractor-veilig zonder inkoopprijs/marge). FloorPlan toont het Afwerkstaat-paneel met kleuren-/materialen-tabellen en een **Exporteer PDF**-knop; lege ruimtes renderen netjes met expliciete leegmeldingen.
 
-Getest: geen domeinspecifieke test.
+Getest: API-tests "room finish schedule bundelt kleuren materialen en notities" en "room finish schedule export werkt voor lege ruimte en 404" — dekken JSON-bundle, PDF-smoke (`%PDF`-header, non-trivial bytes), lege-ruimte-export en 404.
 
 Live staat: 0 rooms in lokale DB.
 
