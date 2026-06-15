@@ -18,6 +18,7 @@ fs.mkdirSync(tmp, { recursive: true });
 
 const express = require("express");
 const { migrate } = require("../db/schema");
+const { db } = require("../db/database");
 
 migrate();
 
@@ -26,6 +27,8 @@ app.use(express.json());
 app.use("/api/clients", require("./clients"));
 app.use("/api/projects", require("./projects"));
 app.use("/api/products", require("./products"));
+app.use("/api/materials", require("./materials"));
+app.use("/api/suppliers", require("./suppliers"));
 app.use("/api/proposals", require("./proposals"));
 app.use((err, _req, res, _next) => res.status(err.name === "ZodError" ? 400 : 500).json({ error: err.message }));
 
@@ -66,6 +69,49 @@ test("productselectie en shoppinglijst totaal", async () => {
   const shopping = await (await j(`/api/products/shopping-list/${project.id}`)).json();
   assert.equal(shopping.items.length, 1);
   assert.equal(shopping.total, 2000, "2 × €1000");
+});
+
+test("material sample workflow request receive reset en dashboard", async () => {
+  const project = await (await j("/api/projects", "POST", { title: "Sampleproject" })).json();
+  const supplier = await (await j("/api/suppliers", "POST", { name: "Stalenhuis" })).json();
+  const material = await (await j("/api/materials", "POST", {
+    project_id: project.id,
+    name: "Travertin sample",
+    spec: "Gezoet",
+    application: "Badkamer",
+    supplier_id: supplier.id
+  })).json();
+  assert.equal(material.sample_status, "none");
+
+  const requested = await (await j(`/api/materials/${material.id}/sample/request`, "POST")).json();
+  assert.equal(requested.sample_status, "requested");
+  assert.ok(requested.sample_requested_at);
+  assert.equal(requested.sample_received_at || "", "");
+
+  const requestedAgain = await (await j(`/api/materials/${material.id}/sample/request`, "POST")).json();
+  assert.equal(requestedAgain.sample_requested_at, requested.sample_requested_at);
+
+  const received = await (await j(`/api/materials/${material.id}/sample/receive`, "POST")).json();
+  assert.equal(received.sample_status, "received");
+  assert.equal(received.sample_requested_at, requested.sample_requested_at);
+  assert.ok(received.sample_received_at);
+
+  const dashboard = await (await j(`/api/materials/project/${project.id}/sample-dashboard`)).json();
+  assert.equal(dashboard.received.length, 1);
+  assert.equal(dashboard.received[0].name, "Travertin sample");
+  assert.equal(dashboard.received[0].supplier_name, "Stalenhuis");
+  assert.equal(dashboard.requested.length, 0);
+
+  const reset = await (await j(`/api/materials/${material.id}/sample/reset`, "POST")).json();
+  assert.equal(reset.sample_status, "none");
+  assert.equal(reset.sample_requested_at || "", "");
+  assert.equal(reset.sample_received_at || "", "");
+
+  const auditRequest = db.prepare("SELECT * FROM audit_log WHERE entity = 'material' AND entity_id = ? AND action = 'sample_request'").get(material.id);
+  const auditReceive = db.prepare("SELECT * FROM audit_log WHERE entity = 'material' AND entity_id = ? AND action = 'sample_receive'").get(material.id);
+  assert.ok(auditRequest);
+  assert.ok(auditReceive);
+  assert.equal((await j("/api/materials/project/missing-project/sample-dashboard")).status, 404);
 });
 
 test("voorstel aanmaken, secties geseed en PDF-export", async () => {

@@ -615,6 +615,8 @@ function migrate() {
   addColumn("materials", "maintenance", "TEXT DEFAULT ''");
   addColumn("materials", "sustainability_score", "INTEGER DEFAULT 0");
   addColumn("materials", "sample_status", "TEXT DEFAULT 'none'");
+  addColumn("materials", "sample_requested_at", "TEXT DEFAULT ''");
+  addColumn("materials", "sample_received_at", "TEXT DEFAULT ''");
 
   addColumn("moodboards", "variant_of_id", "TEXT REFERENCES moodboards(id) ON DELETE SET NULL");
   addColumn("moodboards", "variant_label", "TEXT DEFAULT ''");
