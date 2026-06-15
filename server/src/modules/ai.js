@@ -46,7 +46,8 @@ const runSchema = z.object({
     "knowledge_retrieval"
   ]),
   project_id: z.string().optional(),
-  input: z.any().optional()
+  input: z.any().optional(),
+  tone: z.string().optional()
 });
 
 // Supported AI flows. Each maps to a context-builder below.
@@ -59,6 +60,17 @@ const FLOWS = [
 ];
 
 const REVIEW_STATES = ["approved", "rejected", "pending"];
+
+const TONE_PRESETS = {
+  standaard: { label: "Standaard", instruction: "" },
+  "premium-editorial": { label: "Premium editorial", instruction: "Schrijf met een premium, redactionele studiostem: verfijnd, beeldend en precies." },
+  "warm-persoonlijk": { label: "Warm persoonlijk", instruction: "Schrijf warm, persoonlijk en uitnodigend, met aandacht voor dagelijks gebruik en gevoel." },
+  "zakelijk-beknopt": { label: "Zakelijk beknopt", instruction: "Schrijf zakelijk, bondig en concreet, met korte alinea's en weinig ornament." }
+};
+
+function normalizeTone(value) {
+  return TONE_PRESETS[value] ? value : "standaard";
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,7 +130,7 @@ function fmtEuro(value) {
 }
 
 // Build a Dutch prompt + sources list for each flow. Returns { system, prompt, sources }.
-function buildContext(flow, bundle, input) {
+function buildContext(flow, bundle, input, tone = "standaard") {
   const sources = [];
   const lines = [];
   const userInput = (input && typeof input === "object" ? input.text || input.vraag || input.notes : input) || "";
@@ -216,8 +228,9 @@ function buildContext(flow, bundle, input) {
   const system = [
     "Je bent de AI-assistent van Nova Studio, een tool voor interieuradvies.",
     "Antwoord altijd in helder, professioneel Nederlands.",
-    `Huidige flow: ${flow}.`
-  ].join(" ");
+    `Huidige flow: ${flow}.`,
+    tone !== "standaard" ? TONE_PRESETS[tone].instruction : ""
+  ].filter(Boolean).join(" ");
 
   return { system, prompt: lines.join("\n"), sources };
 }
@@ -249,10 +262,11 @@ function proposalReview(bundle, baseText) {
 }
 
 // Core: build context, call the provider, persist a job, return the hydrated row.
-async function runFlow({ flow, projectId, input }) {
+async function runFlow({ flow, projectId, input, tone }) {
   const bundle = loadProjectBundle(projectId);
   const settings = getSettings();
-  const { system, prompt, sources } = buildContext(flow, bundle, input);
+  const selectedTone = normalizeTone(tone);
+  const { system, prompt, sources } = buildContext(flow, bundle, input, selectedTone);
 
   const result = await runCompletion({ flow, system, prompt, model: settings.model || DEFAULT_MODEL });
   let output = result.text;
@@ -264,13 +278,14 @@ async function runFlow({ flow, projectId, input }) {
   const jobId = id("aijob");
   db.prepare(`
     INSERT INTO ai_jobs
-      (id, project_id, flow, status, review_status, input_json, output_text, sources_json, tokens_in, tokens_out, cost)
+      (id, project_id, flow, status, review_status, tone, input_json, output_text, sources_json, tokens_in, tokens_out, cost)
     VALUES
-      (@id, @project_id, @flow, 'draft', 'pending', @input_json, @output_text, @sources_json, @tokens_in, @tokens_out, @cost)
+      (@id, @project_id, @flow, 'draft', 'pending', @tone, @input_json, @output_text, @sources_json, @tokens_in, @tokens_out, @cost)
   `).run({
     id: jobId,
     project_id: projectId || null,
     flow,
+    tone: selectedTone,
     input_json: JSON.stringify(input ?? {}),
     output_text: output,
     sources_json: JSON.stringify(sources),
@@ -306,6 +321,10 @@ router.put("/settings", validateBody(settingsSchema, { partial: true }), (req, r
   set.push("updated_at = CURRENT_TIMESTAMP");
   db.prepare(`UPDATE ai_settings SET ${set.join(", ")} WHERE id = 1`).run(params);
   res.json(getSettings());
+});
+
+router.get("/tone-presets", (_req, res) => {
+  res.json(Object.entries(TONE_PRESETS).map(([key, preset]) => ({ key, label: preset.label })));
 });
 
 // ---------------------------------------------------------------------------
@@ -409,7 +428,7 @@ router.put("/jobs/:id/review", validateBody(reviewSchema), (req, res) => {
 // ---------------------------------------------------------------------------
 
 router.post("/run", validateBody(runSchema), wrap(async (req, res) => {
-  const { flow, project_id, input } = req.body || {};
+  const { flow, project_id, input, tone } = req.body || {};
   if (!FLOWS.includes(flow)) {
     return res.status(400).json({ error: `Onbekende flow. Kies uit: ${FLOWS.join(", ")}` });
   }
@@ -417,7 +436,7 @@ router.post("/run", validateBody(runSchema), wrap(async (req, res) => {
     const exists = db.prepare("SELECT id FROM projects WHERE id = ?").get(project_id);
     if (!exists) return res.status(404).json({ error: "Project niet gevonden" });
   }
-  const job = await runFlow({ flow, projectId: project_id || null, input });
+  const job = await runFlow({ flow, projectId: project_id || null, input, tone });
   res.status(201).json(job);
 }));
 
@@ -425,7 +444,8 @@ router.post("/jobs/:id/regenerate", wrap(async (req, res) => {
   const source = db.prepare("SELECT * FROM ai_jobs WHERE id = ?").get(req.params.id);
   if (!source) return res.status(404).json({ error: "AI-job niet gevonden" });
   const input = parseJson(source.input_json, {});
-  const job = await runFlow({ flow: source.flow, projectId: source.project_id, input });
+  const tone = req.body && typeof req.body.tone === "string" ? req.body.tone : source.tone;
+  const job = await runFlow({ flow: source.flow, projectId: source.project_id, input, tone });
   res.status(201).json(job);
 }));
 
