@@ -83,6 +83,36 @@ test("voorstel aanmaken, secties geseed en PDF-export", async () => {
   assert.ok(fs.statSync(onDisk).size > 500, "PDF is non-trivial");
 });
 
+test("product price history capture en surface", async () => {
+  const product = await (await j("/api/products", "POST", {
+    name: "Eames Lounge", purchase_price: 10, sale_price: 25, price: 25
+  })).json();
+  const initial = await (await j(`/api/products/${product.id}/price-history`)).json();
+  assert.equal(initial.length, 1, "initial row written on create");
+  assert.equal(initial[0].purchase_price, 10);
+  assert.equal(initial[0].sale_price, 25);
+  assert.equal(initial[0].margin, 15, "margin = sale - purchase");
+
+  const bumped = await j(`/api/products/${product.id}`, "PUT", { sale_price: 30 });
+  assert.equal(bumped.status, 200);
+  const afterBump = await (await j(`/api/products/${product.id}/price-history`)).json();
+  assert.equal(afterBump.length, 2, "price-changing update appends a row");
+  assert.equal(afterBump[0].sale_price, 30, "newest row first");
+
+  const noop = await j(`/api/products/${product.id}`, "PUT", { sale_price: 30, purchase_price: 10, price: 25 });
+  assert.equal(noop.status, 200);
+  const afterNoop = await (await j(`/api/products/${product.id}/price-history`)).json();
+  assert.equal(afterNoop.length, 2, "identical prices do not pollute history");
+
+  const nameOnly = await j(`/api/products/${product.id}`, "PUT", { name: "Eames Lounge — herzien" });
+  assert.equal(nameOnly.status, 200);
+  const afterNameEdit = await (await j(`/api/products/${product.id}/price-history`)).json();
+  assert.equal(afterNameEdit.length, 2, "non-price edits do not append history");
+
+  const missing = await j("/api/products/product_does_not_exist/price-history");
+  assert.equal(missing.status, 404);
+});
+
 test("proposal status flow zet accepted_at", async () => {
   const project = await (await j("/api/projects", "POST", { title: "Statusproject" })).json();
   const proposal = await (await j("/api/proposals", "POST", { project_id: project.id, title: "V" })).json();
