@@ -221,6 +221,7 @@ router.post("/:id/sample/reset", (req, res) => {
     SET sample_status = 'none', sample_requested_at = '', sample_received_at = ''
     WHERE id = ?
   `).run(req.params.id);
+  record("material", req.params.id, "sample_reset");
   res.json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id)));
 });
 
