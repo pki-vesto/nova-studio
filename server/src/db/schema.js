@@ -607,6 +607,7 @@ function migrate() {
   addColumn("proposals", "status", "TEXT NOT NULL DEFAULT 'concept'");
   addColumn("proposals", "summary", "TEXT DEFAULT ''");
   addColumn("proposals", "accepted_at", "TEXT DEFAULT ''");
+  addColumn("ai_jobs", "tone", "TEXT DEFAULT ''");
 
   addColumn("products", "supplier_id", "TEXT REFERENCES suppliers(id) ON DELETE SET NULL");
   addColumn("products", "parent_product_id", "TEXT REFERENCES products(id) ON DELETE SET NULL");

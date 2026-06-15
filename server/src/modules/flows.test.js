@@ -122,3 +122,28 @@ test("AI run falls back to an honest local draft when no API key is set", async 
   const jobs = (await j(`/api/ai/jobs?project_id=${project.id}`)).body;
   assert.ok(jobs.some((x) => x.id === run.body.id), "job persisted and listable");
 });
+
+test("AI tone presets list, persist and regenerate", async () => {
+  const presets = await j("/api/ai/tone-presets");
+  assert.equal(presets.status, 200);
+  assert.deepEqual(presets.body.map((p) => p.key), ["standaard", "premium-editorial", "warm-persoonlijk", "zakelijk-beknopt"]);
+
+  const project = (await j("/api/projects", "POST", { title: "Tone AI-project" })).body;
+  const run = await j("/api/ai/run", "POST", {
+    flow: "proposal_writing",
+    project_id: project.id,
+    input: { text: "Schrijf compact" },
+    tone: "premium-editorial"
+  });
+  assert.equal(run.status, 201);
+  assert.equal(run.body.tone, "premium-editorial");
+  assert.match(run.body.output_text, /Lokaal concept|lokaal concept/);
+
+  const regenerated = await j(`/api/ai/jobs/${run.body.id}/regenerate`, "POST", {});
+  assert.equal(regenerated.status, 201);
+  assert.equal(regenerated.body.tone, "premium-editorial");
+
+  const fallback = await j("/api/ai/run", "POST", { flow: "knowledge_retrieval", project_id: project.id, tone: "onbekend" });
+  assert.equal(fallback.status, 201);
+  assert.equal(fallback.body.tone, "standaard");
+});
