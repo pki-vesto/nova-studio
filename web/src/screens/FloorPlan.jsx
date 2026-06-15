@@ -197,6 +197,16 @@ function PlanVisual({ plan }) {
   // Uploaded file: prefer the served thumb/file URL. PDFs can't render inline.
   if (plan?.file_url || plan?.thumb_url) {
     if (isPdf(plan.file_name)) {
+      if (plan.thumb_url) {
+        return (
+          <div className="ph has-img" style={{ aspectRatio: "16/11", position: "relative" }}>
+            <img src={plan.thumb_url} alt={plan.name || "PDF plattegrond"} />
+            <a className="btn btn-ghost" href={plan.file_url} target="_blank" rel="noreferrer" style={{ position: "absolute", right: 12, bottom: 12, gap: 8, background: "rgba(255,255,255,0.92)" }}>
+              <Icon name="doc" size={16} /> PDF openen
+            </a>
+          </div>
+        );
+      }
       return (
         <div className="ph" style={{ aspectRatio: "16/11", display: "flex", alignItems: "center", justifyContent: "center" }}>
           <a className="btn btn-ghost" href={plan.file_url} target="_blank" rel="noreferrer" style={{ gap: 8 }}>

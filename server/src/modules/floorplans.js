@@ -1,7 +1,8 @@
 const express = require("express");
 const { db } = require("../db/database");
 const { id, parseJson, uploadUrl } = require("./utils");
-const { upload, removeUpload } = require("./uploads");
+const { upload, removeUpload, uploadDir } = require("./uploads");
+const { createPdfThumbnail } = require("./pdfThumbnails");
 const { validateBody, validateForm, z } = require("./validate");
 
 const router = express.Router();
@@ -77,9 +78,10 @@ router.get("/:id", (req, res) => {
 router.post("/", upload.single("file"), validateForm(createSchema), (req, res) => {
   const floorplanId = id("floorplan");
   const drawing = req.body.drawing_json || '{"walls":[],"doors":[],"windows":[],"labels":[]}';
+  const thumbPath = createPdfThumbnail(req.file?.path || "", req.file?.originalname || "", uploadDir);
   db.prepare(`
-    INSERT INTO floorplans (id, project_id, room_id, name, floor_level, file_path, file_name, north_angle, drawing_json, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO floorplans (id, project_id, room_id, name, floor_level, file_path, file_name, north_angle, drawing_json, notes, thumb_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     floorplanId,
     req.body.project_id,
@@ -90,7 +92,8 @@ router.post("/", upload.single("file"), validateForm(createSchema), (req, res) =
     req.file?.originalname || "",
     Number(req.body.north_angle || 0),
     drawing,
-    req.body.notes || ""
+    req.body.notes || "",
+    thumbPath
   );
   res.status(201).json(serializePlan(db.prepare("SELECT * FROM floorplans WHERE id = ?").get(floorplanId)));
 });
@@ -136,10 +139,13 @@ router.put("/:id", validateBody(updateSchema, { partial: true }), (req, res) => 
 });
 
 router.delete("/:id", (req, res) => {
-  const plan = db.prepare("SELECT file_path FROM floorplans WHERE id = ?").get(req.params.id);
+  const plan = db.prepare("SELECT file_path, thumb_path FROM floorplans WHERE id = ?").get(req.params.id);
   db.prepare("DELETE FROM floorplan_objects WHERE floorplan_id = ?").run(req.params.id);
   db.prepare("DELETE FROM floorplans WHERE id = ?").run(req.params.id);
-  if (plan) removeUpload(plan.file_path);
+  if (plan) {
+    removeUpload(plan.file_path);
+    removeUpload(plan.thumb_path);
+  }
   res.status(204).end();
 });
 
