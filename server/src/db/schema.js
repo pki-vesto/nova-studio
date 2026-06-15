@@ -644,6 +644,9 @@ function migrate() {
   addColumn("floorplans", "version", "INTEGER NOT NULL DEFAULT 1");
   addColumn("floorplans", "thumb_path", "TEXT DEFAULT ''");
 
+  addColumn("floorplan_objects", "product_id", "TEXT REFERENCES products(id) ON DELETE SET NULL");
+  addColumn("floorplan_objects", "material_id", "TEXT REFERENCES materials(id) ON DELETE SET NULL");
+
   addColumn("intake", "scope_estimate", "TEXT DEFAULT ''");
   addColumn("intake", "risks_json", "TEXT NOT NULL DEFAULT '[]'");
   addColumn("intake", "followups_json", "TEXT NOT NULL DEFAULT '[]'");
