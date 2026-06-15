@@ -103,6 +103,8 @@ API's: `POST /api/rooms`, `PUT /api/rooms/:id`, `DELETE /api/rooms/:id`, `POST /
 
 Verantwoordelijkheden: plattegrondrecords, uploads, eenvoudige tekening-JSON, **schaal** (`scale_ratio`/`scale_unit`), **vector-objecten op lagen** (`floorplan_objects`: walls/meubels/annotaties, CRUD per object), **versiebeheer** (`/new-version` kloont plattegrond + objecten) en thumbnails.
 
+PDF-thumbnail rendering gebruikt Poppler via `pdftoppm` (`server/src/modules/pdfThumbnails.js`). De Docker-runtime installeert `poppler-utils`; andere deployments moeten `pdftoppm` op `PATH` leveren. `npm run check:pdf-renderer` faalt expliciet wanneer de dependency ontbreekt. Uploads blijven betrouwbaar doordat de app bij renderfouten een gelabelde SVG-fallback thumbnail schrijft.
+
 Datamodellen: `floorplans`, `floorplan_objects`.
 
 Services: `server/src/modules/floorplans.js`, `web/src/screens/FloorPlan.jsx`.

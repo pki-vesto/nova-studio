@@ -27,6 +27,86 @@ function SampleBadge({ status }) {
   );
 }
 
+function dateLabel(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function SampleActions({ material, onTransition }) {
+  const status = material.sample_status || "none";
+  return (
+    <div className="row gap2" style={{ flexWrap: "wrap", marginTop: 12 }}>
+      {status === "none" && (
+        <button type="button" className="btn btn-ghost" style={{ padding: "7px 10px" }} onClick={() => onTransition(material.id, "request")}>
+          <Icon name="upload" size={13} /> Sample aanvragen
+        </button>
+      )}
+      {status === "requested" && (
+        <button type="button" className="btn btn-clay" style={{ padding: "7px 10px" }} onClick={() => onTransition(material.id, "receive")}>
+          <Icon name="check" size={13} /> Ontvangen
+        </button>
+      )}
+      {status !== "none" && (
+        <button type="button" className="btn btn-ghost" style={{ padding: "7px 10px" }} onClick={() => onTransition(material.id, "reset")}>
+          <Icon name="close" size={13} /> Reset
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SampleDashboard({ project, refreshKey, fail }) {
+  const [dashboard, setDashboard] = useState({ requested: [], received: [], none: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.get(`/api/materials/project/${project.id}/sample-dashboard`);
+        if (!cancelled) setDashboard(data);
+      } catch (err) {
+        fail(err);
+        if (!cancelled) setDashboard({ requested: [], received: [], none: [] });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [project.id, refreshKey]);
+
+  const groups = [
+    ["Aangevraagd", dashboard.requested || [], "sample_requested_at"],
+    ["Ontvangen", dashboard.received || [], "sample_received_at"],
+    ["Geen staal", dashboard.none || [], ""]
+  ];
+
+  return (
+    <section>
+      <SectionHead kicker="Sample dashboard"
+        title="Materiaalstalen per status"
+        sub="Openstaande en ontvangen stalen per project, inclusief leverancier en datum." />
+      <div className="grid grid-3">
+        {groups.map(([label, rows, dateField]) => (
+          <div className="card" key={label} style={{ padding: 22 }}>
+            <div className="row between middle" style={{ marginBottom: 14 }}>
+              <h4 className="serif" style={{ fontSize: 19, margin: 0 }}>{label}</h4>
+              <span className="tag">{rows.length}</span>
+            </div>
+            {rows.length ? (
+              <div className="col gap3">
+                {rows.map((m) => (
+                  <div key={m.id} style={{ paddingBottom: 10, borderBottom: "1px solid var(--line)" }}>
+                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>{m.name}</div>
+                    <div className="caption">{[m.supplier_name, dateLabel(m[dateField])].filter(Boolean).join(" · ")}</div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="caption" style={{ margin: 0 }}>Geen materialen.</p>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function PaletteDrawer({ ctx, onClose }) {
   const { project, reload, fail } = ctx;
   const [text, setText] = useState(
@@ -468,12 +548,21 @@ function RoomColorsSection({ ctx, onEdit }) {
 }
 
 export function ColorMaterial({ ctx }) {
-  const { project } = ctx;
+  const { project, reload, fail } = ctx;
   const palette = project.palette || [];
   const materials = project.materials || [];
   const [editPalette, setEditPalette] = useState(false);
   const [editRoomColors, setEditRoomColors] = useState(false);
   const [editMaterials, setEditMaterials] = useState(false);
+  const [sampleRefresh, setSampleRefresh] = useState(0);
+
+  async function transitionSample(materialId, action) {
+    try {
+      await api.json(`/api/materials/${materialId}/sample/${action}`, "POST", {});
+      await reload();
+      setSampleRefresh((n) => n + 1);
+    } catch (err) { fail(err); }
+  }
 
   return (
     <div className="content content-wide rise">
@@ -520,6 +609,10 @@ export function ColorMaterial({ ctx }) {
 
       <hr className="hr" style={{ margin: "64px 0 56px" }} />
 
+      <SampleDashboard project={project} refreshKey={sampleRefresh} fail={fail} />
+
+      <hr className="hr" style={{ margin: "64px 0 56px" }} />
+
       <SectionHead kicker="Materiaalconcept"
         title="Tactiele materialen die mooier verouderen"
         sub="Elk materiaal is gekozen op gevoel én op duurzaamheid. Ze patineren, leven en vertellen na jaren nog hetzelfde verhaal."
@@ -540,6 +633,7 @@ export function ColorMaterial({ ctx }) {
                 {m.application && <div className="body" style={{ fontSize: 13.5, marginTop: 8 }}>Toepassing — {m.application}</div>}
                 {m.maintenance && <div className="caption" style={{ marginTop: 8, color: "var(--ink-2)", lineHeight: 1.5 }}>Onderhoud — {m.maintenance}</div>}
                 {m.sample_status && m.sample_status !== "none" && <div style={{ marginTop: 10 }}><SampleBadge status={m.sample_status} /></div>}
+                <SampleActions material={m} onTransition={transitionSample} />
               </div>
             </div>
           ))}

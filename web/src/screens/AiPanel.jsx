@@ -14,6 +14,12 @@ const FLOWS = [
   { value: "knowledge_retrieval", label: "Kennis-retrieval" }
 ];
 const flowLabel = (value) => FLOWS.find((f) => f.value === value)?.label || value;
+const PROPOSAL_SECTIONS = [
+  { key: "intro", label: "Intro" },
+  { key: "style", label: "Stijl" },
+  { key: "rationale", label: "Rationale" },
+  { key: "next-steps", label: "Vervolg" }
+];
 
 // Review status → Dutch label + brand colour for the tag.
 const REVIEW = {
@@ -70,6 +76,7 @@ function JobBody({ job }) {
 function JobMeta({ job }) {
   const cost = fmtCost(job.cost);
   const parts = [];
+  if (job.tone && job.tone !== "standaard") parts.push(job.tone);
   if (job.tokens_in != null || job.tokens_out != null)
     parts.push(`${job.tokens_in ?? 0} in · ${job.tokens_out ?? 0} uit tokens`);
   if (cost) parts.push(cost);
@@ -77,7 +84,7 @@ function JobMeta({ job }) {
   return <div className="caption">{parts.join("  ·  ")}</div>;
 }
 
-function JobCard({ job, busy, onApprove, onReject, onRegenerate, onDelete }) {
+function JobCard({ job, busy, onApprove, onReject, onRegenerate, onRegenerateSection, onDelete }) {
   return (
     <div className="card" style={{ padding: 24 }}>
       <div className="row between middle wrap gap2" style={{ marginBottom: 14 }}>
@@ -92,6 +99,16 @@ function JobCard({ job, busy, onApprove, onReject, onRegenerate, onDelete }) {
       <JobBody job={job} />
 
       <div className="hr" style={{ margin: "18px 0 14px" }} />
+
+      {job.flow === "proposal_writing" && (
+        <div className="row wrap gap2" style={{ marginBottom: 14 }}>
+          {PROPOSAL_SECTIONS.map((section) => (
+            <button key={section.key} className="btn btn-ghost" style={{ padding: "6px 10px" }} disabled={busy} onClick={() => onRegenerateSection(job, section.key)}>
+              <Icon name="spark" size={13} /> Regenereer {section.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="row between middle wrap gap2">
         <JobMeta job={job} />
@@ -118,6 +135,8 @@ export function AiPanel({ ctx }) {
   const { project, fail } = ctx;
   const [settings, setSettings] = useState(null);
   const [jobs, setJobs] = useState([]);
+  const [tonePresets, setTonePresets] = useState([{ key: "standaard", label: "Standaard" }]);
+  const [tone, setTone] = useState("standaard");
   const [input, setInput] = useState("");
   const [running, setRunning] = useState("");        // flow value currently running
   const [busyId, setBusyId] = useState(null);        // job id under review/delete/regenerate
@@ -133,6 +152,7 @@ export function AiPanel({ ctx }) {
   useEffect(() => {
     let alive = true;
     api.get("/api/ai/settings").then((s) => { if (alive) setSettings(s); }).catch(fail);
+    api.get("/api/ai/tone-presets").then((items) => { if (alive && Array.isArray(items)) setTonePresets(items); }).catch(fail);
     loadJobs();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +161,7 @@ export function AiPanel({ ctx }) {
   async function run(flow) {
     setRunning(flow);
     try {
-      await api.json("/api/ai/run", "POST", { flow, project_id: project.id, input });
+      await api.json("/api/ai/run", "POST", { flow, project_id: project.id, input, tone });
       setInput("");
       await loadJobs();
     } catch (err) { fail(err); } finally { setRunning(""); }
@@ -152,6 +172,15 @@ export function AiPanel({ ctx }) {
     try {
       const fresh = await api.json(`/api/ai/jobs/${job.id}/regenerate`, "POST", {});
       // Prepend the new job optimistically, then resync from server.
+      if (fresh && fresh.id) setJobs((prev) => [fresh, ...prev]);
+      await loadJobs();
+    } catch (err) { fail(err); } finally { setBusyId(null); }
+  }
+
+  async function regenerateSection(job, section) {
+    setBusyId(job.id);
+    try {
+      const fresh = await api.json(`/api/ai/jobs/${job.id}/regenerate-section`, "POST", { section });
       if (fresh && fresh.id) setJobs((prev) => [fresh, ...prev]);
       await loadJobs();
     } catch (err) { fail(err); } finally { setBusyId(null); }
@@ -215,13 +244,20 @@ export function AiPanel({ ctx }) {
             </button>
           ))}
         </div>
-        <Field label="Extra instructie of vraag">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            rows={3}
-            placeholder="Bijv. focus op de woonkamer, of houd het voorstel bondig…" />
-        </Field>
+        <div className="form-grid form-grid-2">
+          <Field label="Tone-of-voice">
+            <select value={tone} onChange={(e) => setTone(e.target.value)}>
+              {tonePresets.map((preset) => <option key={preset.key} value={preset.key}>{preset.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Extra instructie of vraag">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              rows={3}
+              placeholder="Bijv. focus op de woonkamer, of houd het voorstel bondig…" />
+          </Field>
+        </div>
         {running && <p className="caption" style={{ marginTop: 12 }}>Nova werkt aan “{flowLabel(running)}” — een moment…</p>}
       </div>
 
@@ -280,6 +316,7 @@ export function AiPanel({ ctx }) {
               onApprove={(j) => review(j, "approved")}
               onReject={(j) => review(j, "rejected")}
               onRegenerate={regenerate}
+              onRegenerateSection={regenerateSection}
               onDelete={remove} />
           ))}
         </div>

@@ -1,9 +1,64 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
 import { money } from "../lib/format.js";
 import { Ph, Kicker } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
+
+function formatChangedAt(value) {
+  if (!value) return "";
+  const iso = value.includes("T") ? value : value.replace(" ", "T") + "Z";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("nl-NL", { timeZone: "Europe/Amsterdam" });
+}
+
+function PriceHistoryPanel({ productId }) {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    if (!productId) { setRows([]); return; }
+    let cancelled = false;
+    api.get(`/api/products/${productId}/price-history`)
+      .then((data) => { if (!cancelled) setRows(data || []); })
+      .catch(() => { if (!cancelled) setRows([]); });
+    return () => { cancelled = true; };
+  }, [productId]);
+
+  if (rows === null) return null;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <Kicker style={{ marginBottom: 8 }}>Prijsgeschiedenis</Kicker>
+      {rows.length === 0 ? (
+        <p className="caption" style={{ margin: 0, color: "var(--ink-2)" }}>
+          Nog geen prijswijzigingen vastgelegd.
+        </p>
+      ) : (
+        <table className="table" style={{ width: "100%", fontSize: 13 }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left" }}>Datum</th>
+              <th style={{ textAlign: "right" }}>Inkoop</th>
+              <th style={{ textAlign: "right" }}>Verkoop</th>
+              <th style={{ textAlign: "right" }}>Prijs</th>
+              <th style={{ textAlign: "right" }}>Marge</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id}>
+                <td>{formatChangedAt(row.changed_at)}</td>
+                <td style={{ textAlign: "right" }}>{money(row.purchase_price)}</td>
+                <td style={{ textAlign: "right" }}>{money(row.sale_price)}</td>
+                <td style={{ textAlign: "right" }}>{money(row.price)}</td>
+                <td style={{ textAlign: "right" }}>{money(row.margin)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
 
 function ProductDrawer({ ctx, product, onClose }) {
   const { loadProjectList, fail } = ctx;
@@ -47,6 +102,7 @@ function ProductDrawer({ ctx, product, onClose }) {
         </div>
         <Field label="Omschrijving / motivatie"><textarea value={form.description} onChange={set("description")} rows={3} /></Field>
         <Field label="Productfoto"><input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} /></Field>
+        {editing && <PriceHistoryPanel productId={product.id} />}
       </div>
     </EditDrawer>
   );
