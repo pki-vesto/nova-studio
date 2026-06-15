@@ -18,6 +18,7 @@ fs.mkdirSync(tmp, { recursive: true });
 
 const express = require("express");
 const { migrate } = require("../db/schema");
+const { db } = require("../db/database");
 
 migrate();
 
@@ -26,6 +27,7 @@ app.use(express.json());
 app.use("/api/clients", require("./clients"));
 app.use("/api/projects", require("./projects"));
 app.use("/api/products", require("./products"));
+app.use("/api/suppliers", require("./suppliers"));
 app.use("/api/proposals", require("./proposals"));
 app.use((err, _req, res, _next) => res.status(err.name === "ZodError" ? 400 : 500).json({ error: err.message }));
 
@@ -66,6 +68,53 @@ test("productselectie en shoppinglijst totaal", async () => {
   const shopping = await (await j(`/api/products/shopping-list/${project.id}`)).json();
   assert.equal(shopping.items.length, 1);
   assert.equal(shopping.total, 2000, "2 × €1000");
+});
+
+test("supplier price list import maakt kandidaten en update SKU matches", async () => {
+  const supplier = await (await j("/api/suppliers", "POST", { name: "Vescom" })).json();
+  const existing = await (await j("/api/products", "POST", {
+    name: "Oude wandbekleding",
+    sku: "SKU-1",
+    price: 10,
+    purchase_price: 4,
+    sale_price: 9
+  })).json();
+
+  const csv = [
+    "name,sku,purchase_price,sale_price,price,vat_rate,category,brand,ignored",
+    "Nieuwe wandbekleding,SKU-2,20,35,40,21,Wandbekleding,Vescom,x",
+    "Vernieuwde wandbekleding,SKU-1,12,30,33,9,Wandbekleding,Vescom,y",
+    ",SKU-EMPTY,1,2,3,21,Decor,Vescom,z"
+  ].join("\n");
+
+  const res = await j(`/api/suppliers/${supplier.id}/import-price-list`, "POST", { csv });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { created: 1, updated: 1, skipped: 1 });
+
+  const updated = db.prepare("SELECT * FROM products WHERE id = ?").get(existing.id);
+  assert.equal(updated.name, "Oude wandbekleding");
+  assert.equal(updated.supplier_id, supplier.id);
+  assert.equal(updated.supplier, "Vescom");
+  assert.equal(updated.price, 33);
+  assert.equal(updated.purchase_price, 12);
+  assert.equal(updated.sale_price, 30);
+  assert.equal(updated.margin, 18);
+  assert.equal(updated.vat_rate, 9);
+
+  const created = db.prepare("SELECT * FROM products WHERE sku = ?").get("SKU-2");
+  assert.ok(created);
+  assert.equal(created.status, "candidate");
+  assert.equal(created.supplier_id, supplier.id);
+  assert.equal(created.supplier, "Vescom");
+  assert.equal(created.margin, 15);
+
+  const audit = db.prepare(`
+    SELECT * FROM audit_log
+    WHERE entity = 'supplier' AND entity_id = ? AND action = 'price_list_import'
+    ORDER BY rowid DESC
+  `).get(supplier.id);
+  assert.ok(audit);
+  assert.deepEqual(JSON.parse(audit.detail), { created: 1, updated: 1, skipped: 1 });
 });
 
 test("voorstel aanmaken, secties geseed en PDF-export", async () => {
