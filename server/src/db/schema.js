@@ -576,6 +576,19 @@ function migrate() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Product price history: append-only trail of purchase/sale/price changes.
+    CREATE TABLE IF NOT EXISTS product_price_history (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      purchase_price REAL,
+      sale_price REAL,
+      price REAL,
+      margin REAL,
+      note TEXT DEFAULT '',
+      changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_pph_product_changed ON product_price_history(product_id, changed_at DESC);
+
     -- Render pipeline (job registry + outputs; adapter is pluggable).
     CREATE TABLE IF NOT EXISTS render_jobs (
       id TEXT PRIMARY KEY,
@@ -594,6 +607,7 @@ function migrate() {
   addColumn("proposals", "status", "TEXT NOT NULL DEFAULT 'concept'");
   addColumn("proposals", "summary", "TEXT DEFAULT ''");
   addColumn("proposals", "accepted_at", "TEXT DEFAULT ''");
+  addColumn("ai_jobs", "tone", "TEXT DEFAULT ''");
 
   addColumn("products", "supplier_id", "TEXT REFERENCES suppliers(id) ON DELETE SET NULL");
   addColumn("products", "parent_product_id", "TEXT REFERENCES products(id) ON DELETE SET NULL");

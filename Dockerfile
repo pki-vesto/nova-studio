@@ -11,9 +11,13 @@ FROM node:22-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4000
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends poppler-utils \
+  && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY server ./server
+COPY scripts ./scripts
 COPY --from=build /app/dist ./dist
 RUN mkdir -p /app/data /app/server/uploads
 EXPOSE 4000

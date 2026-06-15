@@ -11,6 +11,7 @@
     "seed": "node server/src/seed.js",
     "backup": "node server/src/backup.js",
     "build": "vite build",
+    "check:pdf-renderer": "node scripts/check-pdf-renderer.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "smoke": "node --test web/src/**/*.smoke.test.js",
     "test": "node --test server/src/**/*.test.js"
