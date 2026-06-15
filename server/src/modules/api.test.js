@@ -27,6 +27,7 @@ app.use(express.json());
 app.use("/api/clients", require("./clients"));
 app.use("/api/projects", require("./projects"));
 app.use("/api/products", require("./products"));
+app.use("/api/rooms", require("./rooms"));
 app.use("/api/materials", require("./materials"));
 app.use("/api/suppliers", require("./suppliers"));
 app.use("/api/proposals", require("./proposals"));
@@ -69,6 +70,70 @@ test("productselectie en shoppinglijst totaal", async () => {
   const shopping = await (await j(`/api/products/shopping-list/${project.id}`)).json();
   assert.equal(shopping.items.length, 1);
   assert.equal(shopping.total, 2000, "2 × €1000");
+});
+
+test("room finish schedule bundelt kleuren materialen en notities", async () => {
+  const project = await (await j("/api/projects", "POST", { title: "Afwerkproject" })).json();
+  const room = await (await j("/api/rooms", "POST", {
+    project_id: project.id,
+    name: "Woonkamer",
+    floor_level: "Bel-etage",
+    concept: "Rustig en tactiel",
+    color_notes: "Kalkmat op de wanden",
+    designer_notes: "Plinten in dezelfde tint"
+  })).json();
+
+  db.prepare("INSERT INTO color_library (id, name, hex, code, finish) VALUES (?, ?, ?, ?, ?)")
+    .run("color_test", "Kalkwit", "#f4efe7", "KW-01", "Mat");
+  db.prepare("INSERT INTO room_colors (id, room_id, color_id, application) VALUES (?, ?, ?, ?)")
+    .run("roomcolor_test", room.id, "color_test", "Wanden");
+  db.prepare(`
+    INSERT INTO materials (id, project_id, name, spec, application, maintenance)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run("material_test", project.id, "Eiken vloer", "Gerookt, geolied", "Vloer", "pH-neutraal reinigen");
+
+  const res = await j(`/api/rooms/${room.id}/finish-schedule`);
+  assert.equal(res.status, 200);
+  const bundle = await res.json();
+  assert.equal(bundle.room.id, room.id);
+  assert.equal(bundle.notes.concept, "Rustig en tactiel");
+  assert.equal(bundle.colors.length, 1);
+  assert.equal(bundle.colors[0].resolved_name, "Kalkwit");
+  assert.equal(bundle.colors[0].resolved_hex, "#f4efe7");
+  assert.equal(bundle.colors[0].library_finish, "Mat");
+  assert.equal(bundle.materials.length, 1);
+  assert.equal(bundle.materials[0].name, "Eiken vloer");
+
+  const pdfRes = await j(`/api/rooms/${room.id}/finish-schedule.pdf`, "POST");
+  assert.equal(pdfRes.status, 200);
+  const out = await pdfRes.json();
+  assert.ok(out.filename.endsWith(".pdf"));
+  const onDisk = path.join(process.env.NOVA_EXPORT_DIR, path.basename(out.path));
+  assert.ok(fs.existsSync(onDisk), "finish schedule PDF written");
+  const pdf = fs.readFileSync(onDisk);
+  assert.equal(pdf.subarray(0, 4).toString("utf8"), "%PDF");
+  assert.ok(pdf.length > 500, "finish schedule PDF is non-trivial");
+  assert.equal(pdf.includes(Buffer.from("9999")), false, "internal price/margin values are absent");
+});
+
+test("room finish schedule export werkt voor lege ruimte en 404", async () => {
+  const project = await (await j("/api/projects", "POST", { title: "Leeg afwerkproject" })).json();
+  const room = await (await j("/api/rooms", "POST", { project_id: project.id, name: "Hal" })).json();
+
+  const bundleRes = await j(`/api/rooms/${room.id}/finish-schedule`);
+  assert.equal(bundleRes.status, 200);
+  const bundle = await bundleRes.json();
+  assert.equal(bundle.colors.length, 0);
+  assert.equal(bundle.materials.length, 0);
+
+  const pdfRes = await j(`/api/rooms/${room.id}/finish-schedule.pdf`, "POST");
+  assert.equal(pdfRes.status, 200);
+  const out = await pdfRes.json();
+  const onDisk = path.join(process.env.NOVA_EXPORT_DIR, path.basename(out.path));
+  assert.equal(fs.readFileSync(onDisk).subarray(0, 4).toString("utf8"), "%PDF");
+
+  assert.equal((await j("/api/rooms/missing-room/finish-schedule")).status, 404);
+  assert.equal((await j("/api/rooms/missing-room/finish-schedule.pdf", "POST")).status, 404);
 });
 
 test("material sample workflow request receive reset en dashboard", async () => {
