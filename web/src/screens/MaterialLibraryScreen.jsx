@@ -59,11 +59,125 @@ function Stars({ score }) {
   );
 }
 
+const SAMPLE_GROUP_META = {
+  requested: { label: "Aangevraagd", emptyLabel: "Geen openstaande samples" },
+  none: { label: "Geen sample", emptyLabel: "Geen materialen zonder sample" },
+  received: { label: "Ontvangen", emptyLabel: "Nog geen samples ontvangen" }
+};
+
+function sampleDate(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function SampleGroupCard({ kind, rows, dim, defaultOpen }) {
+  const meta = SAMPLE_GROUP_META[kind];
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="card" style={{ padding: 24, opacity: dim ? 0.85 : 1 }}>
+      <button type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="row between middle"
+        style={{
+          width: "100%", padding: 0, background: "transparent", border: "none",
+          cursor: "pointer", textAlign: "left", color: "inherit"
+        }}>
+        <div className="row gap2 middle">
+          <Icon name={open ? "chevD" : "chevR"} size={14} />
+          <h3 className="serif" style={{ fontSize: 22, margin: 0 }}>{meta.label}</h3>
+          <span className="tag">{rows.length}</span>
+        </div>
+      </button>
+      {open && (
+        <div style={{ marginTop: 18 }}>
+          {rows.length === 0 ? (
+            <p className="caption" style={{ margin: 0 }}>{meta.emptyLabel}.</p>
+          ) : (
+            <div className="col gap3">
+              {rows.map((row) => {
+                const dateField = kind === "requested" ? row.sample_requested_at
+                  : kind === "received" ? row.sample_received_at : "";
+                const meta2 = [
+                  [row.brand, row.code].filter(Boolean).join(" "),
+                  row.supplier_name || "—",
+                  sampleDate(dateField)
+                ].filter(Boolean).join(" · ");
+                return (
+                  <a key={row.id}
+                    href={`#/project/${row.project_id}/material`}
+                    className="row between middle"
+                    style={{
+                      gap: 14, padding: "10px 0", borderBottom: "1px solid var(--line)",
+                      textDecoration: "none", color: "inherit"
+                    }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{row.name || "Materiaal"}</div>
+                      <Kicker style={{ marginTop: 4 }}>{row.project_title}</Kicker>
+                      {meta2 && <div className="caption" style={{ marginTop: 4 }}>{meta2}</div>}
+                    </div>
+                    <Icon name="chevR" size={14} />
+                  </a>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SampleOverviewPanel({ fail }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await api.get("/api/materials/sample-overview");
+        if (!cancelled) setData(result);
+      } catch (err) {
+        if (!cancelled) setError(true);
+        fail(err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (error) return <p className="caption">Sample-overzicht kon niet geladen worden.</p>;
+  if (!data) return <p className="caption">Sample-overzicht laden…</p>;
+
+  const counts = data.counts || { requested: 0, none: 0, received: 0 };
+  const total = counts.requested + counts.none + counts.received;
+  if (total === 0) {
+    return (
+      <div className="empty">
+        <p className="body" style={{ margin: 0 }}>
+          Nog geen projectmaterialen met sample-status. Voeg materialen toe in een project om hier overzicht te krijgen.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="col gap4">
+      <p className="body" style={{ marginTop: 0, marginBottom: 4 }}>
+        Openstaande en ontvangen stalen over alle actieve projecten — klik een rij om naar het project te springen.
+      </p>
+      <SampleGroupCard kind="requested" rows={data.groups.requested || []} defaultOpen />
+      <SampleGroupCard kind="none" rows={data.groups.none || []} defaultOpen={false} />
+      <SampleGroupCard kind="received" rows={data.groups.received || []} defaultOpen={false} dim />
+    </div>
+  );
+}
+
 export function MaterialLibraryScreen({ ctx }) {
   const { fail } = ctx;
   const [materials, setMaterials] = useState([]);
   const [cat, setCat] = useState("Alle");
   const [drawer, setDrawer] = useState(null); // null | {} | material
+  const [tab, setTab] = useState("library"); // "library" | "samples"
 
   async function load() {
     try { setMaterials(await api.get("/api/material-library")); } catch (err) { fail(err); }
@@ -79,10 +193,25 @@ export function MaterialLibraryScreen({ ctx }) {
     <div className="content content-wide rise">
       <div className="page-head">
         <div><Kicker style={{ marginBottom: 14 }}>Globale bron</Kicker><h1 className="page-title">Materiaalbibliotheek</h1></div>
-        <button className="btn btn-primary btn-lg" onClick={() => setDrawer({})}><Icon name="plus" size={16} /> Materiaal toevoegen</button>
+        {tab === "library" && (
+          <button className="btn btn-primary btn-lg" onClick={() => setDrawer({})}><Icon name="plus" size={16} /> Materiaal toevoegen</button>
+        )}
       </div>
 
-      {materials.length === 0 ? (
+      <div className="row gap2 wrap" style={{ marginBottom: 32 }}>
+        <button className={`btn ${tab === "library" ? "btn-primary" : "btn-ghost"}`}
+          style={{ borderRadius: 99, padding: "8px 16px" }} onClick={() => setTab("library")}>
+          Bibliotheek
+        </button>
+        <button className={`btn ${tab === "samples" ? "btn-primary" : "btn-ghost"}`}
+          style={{ borderRadius: 99, padding: "8px 16px" }} onClick={() => setTab("samples")}>
+          Sample-status
+        </button>
+      </div>
+
+      {tab === "samples" ? (
+        <SampleOverviewPanel fail={fail} />
+      ) : materials.length === 0 ? (
         <div className="empty"><p className="body" style={{ margin: 0 }}>Nog geen materialen. Voeg stalen toe — ze verschijnen hier en zijn beschikbaar in elk project.</p>
           <button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Eerste materiaal</button>
         </div>

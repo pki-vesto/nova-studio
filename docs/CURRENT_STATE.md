@@ -78,7 +78,7 @@ Live staat: globale tabel aanwezig, nog leeg.
 
 ### Material Library (globaal + projectlink + onderhoud/duurzaamheid/sample)
 
-Werkt: **globale `material_library`** (categorie, merk, code, spec, onderhoud, duurzaamheidsscore, beeld) met CRUD-UI in `MaterialLibraryScreen.jsx`. Projectmaterialen kunnen **uit de bibliotheek worden overgenomen** (`materials/from-library`) en dragen nu `supplier_id`, `library_id`, `brand`, `code`, `maintenance`, `sustainability_score` en `sample_status`. Tonen in ColorMaterial, Proposal en Presentation.
+Werkt: **globale `material_library`** (categorie, merk, code, spec, onderhoud, duurzaamheidsscore, beeld) met CRUD-UI in `MaterialLibraryScreen.jsx`. Projectmaterialen kunnen **uit de bibliotheek worden overgenomen** (`materials/from-library`) en dragen nu `supplier_id`, `library_id`, `brand`, `code`, `maintenance`, `sustainability_score` en `sample_status`. Tonen in ColorMaterial, Proposal en Presentation. **Cross-project sample-overzicht**: `GET /api/materials/sample-overview` groepeert projectmaterialen op `sample_status` over alle niet-soft-deleted projecten (incl. project_title + supplier_name); de Materiaalbibliotheek heeft een tab **Sample-status** die de groepen toont met aantallen en deep links (`#/project/<id>/material`) terug naar het projectmateriaaltabblad.
 
 Getest: geen.
 

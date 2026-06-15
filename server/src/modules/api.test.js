@@ -179,6 +179,61 @@ test("material sample workflow request receive reset en dashboard", async () => 
   assert.equal((await j("/api/materials/project/missing-project/sample-dashboard")).status, 404);
 });
 
+test("material sample overview groepeert per status en sluit soft-deleted projecten uit", async () => {
+  const p1 = await (await j("/api/projects", "POST", { title: "Sample Overview A" })).json();
+  const p2 = await (await j("/api/projects", "POST", { title: "Sample Overview B" })).json();
+  const p3 = await (await j("/api/projects", "POST", { title: "Sample Overview Verwijderd" })).json();
+  const supplier = await (await j("/api/suppliers", "POST", { name: "Overview Stalenhuis" })).json();
+
+  const m1 = await (await j("/api/materials", "POST", {
+    project_id: p1.id, name: "Travertin OV1", brand: "Solid", code: "TRV-OV1",
+    sample_status: "requested", supplier_id: supplier.id
+  })).json();
+  await j("/api/materials", "POST", {
+    project_id: p1.id, name: "Marmer OV2", sample_status: "received", supplier_id: supplier.id
+  });
+  await j("/api/materials", "POST", { project_id: p1.id, name: "Eik OV3", sample_status: "none" });
+  await j("/api/materials", "POST", {
+    project_id: p2.id, name: "Linnen OV4", sample_status: "requested"
+  });
+  const deleted = await (await j("/api/materials", "POST", {
+    project_id: p3.id, name: "Wool OV5", sample_status: "requested", supplier_id: supplier.id
+  })).json();
+
+  // Soft-delete project 3 — its materials must be excluded from the overview.
+  db.prepare("UPDATE projects SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?").run(p3.id);
+
+  const overview = await (await j("/api/materials/sample-overview")).json();
+  assert.ok(overview.groups, "groups present");
+  assert.ok(overview.counts, "counts present");
+
+  const all = [...overview.groups.requested, ...overview.groups.received, ...overview.groups.none];
+  const ids = all.map((r) => r.id);
+  assert.equal(ids.includes(deleted.id), false, "soft-deleted project material excluded");
+
+  // Only assert on materials seeded in this test, to stay isolated from other tests.
+  const seeded = (rows) => rows.filter((r) => r.project_id === p1.id || r.project_id === p2.id);
+  const requested = seeded(overview.groups.requested);
+  const received = seeded(overview.groups.received);
+  const none = seeded(overview.groups.none);
+  assert.equal(requested.length, 2, "two requested samples across both projects");
+  assert.equal(received.length, 1, "one received sample");
+  assert.equal(none.length, 1, "one none sample");
+
+  // Counts mirror group lengths (sanity, not seed-only).
+  assert.equal(overview.counts.requested, overview.groups.requested.length);
+  assert.equal(overview.counts.received, overview.groups.received.length);
+  assert.equal(overview.counts.none, overview.groups.none.length);
+
+  // Row shape: project_title is always present; supplier_name reflects the join.
+  const m1row = requested.find((r) => r.id === m1.id);
+  assert.ok(m1row, "seeded requested material present");
+  assert.equal(m1row.project_title, "Sample Overview A");
+  assert.equal(m1row.supplier_name, "Overview Stalenhuis");
+  const linnen = requested.find((r) => r.name === "Linnen OV4");
+  assert.equal(linnen.supplier_name, null, "supplier_name is null when not linked");
+});
+
 test("supplier price list import maakt kandidaten en update SKU matches", async () => {
   const supplier = await (await j("/api/suppliers", "POST", { name: "Vescom" })).json();
   const existing = await (await j("/api/products", "POST", {

@@ -264,7 +264,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 233. [Not Started] Product duplicate detection.
 234. [Not Started] Product enrichment queue.
 235. [Partial] Material sample ordering workflow. (sample_status-veld; geen bestelflow)
-236. [Partial] Material sample status dashboard. (status zichtbaar in Material Library; geen dashboard)
+236. [Completed] Material sample status dashboard. (cross-project sample-overview endpoint + tab in Materiaalbibliotheek met deep links naar projectmateriaaltab)
 237. [Completed] Color palette comparison tool. (Color Library + per-room toepassingen)
 238. [Partial] Room specification sheet. (roomvelden + appendices; geen aparte spec-sheet-export)
 239. [Not Started] Room finish schedule.

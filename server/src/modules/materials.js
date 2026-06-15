@@ -41,6 +41,46 @@ router.get("/project/:projectId", (req, res) => {
   res.json(rows.map(hydrate));
 });
 
+// Cross-project sample-status overview. Aggregates project materials by
+// sample_status across all non-soft-deleted projects so the designer can chase
+// outstanding samples from one screen instead of opening each project.
+router.get("/sample-overview", (req, res) => {
+  const rows = db.prepare(`
+    SELECT m.id, m.name, m.brand, m.code, m.spec, m.application,
+           m.sample_status, m.sample_requested_at, m.sample_received_at,
+           m.project_id, m.supplier_id,
+           p.title AS project_title,
+           s.name  AS supplier_name
+    FROM materials m
+    JOIN projects p ON p.id = m.project_id
+    LEFT JOIN suppliers s ON s.id = m.supplier_id
+    WHERE (p.deleted_at IS NULL OR p.deleted_at = '')
+    ORDER BY
+      CASE m.sample_status
+        WHEN 'requested' THEN 0
+        WHEN 'none'      THEN 1
+        WHEN 'received'  THEN 2
+        ELSE 3
+      END,
+      m.sample_requested_at DESC,
+      p.title COLLATE NOCASE,
+      m.name  COLLATE NOCASE
+  `).all();
+  const groups = { requested: [], none: [], received: [] };
+  for (const r of rows) {
+    const key = r.sample_status || "none";
+    if (groups[key]) groups[key].push(r);
+  }
+  res.json({
+    groups,
+    counts: {
+      requested: groups.requested.length,
+      none: groups.none.length,
+      received: groups.received.length
+    }
+  });
+});
+
 router.get("/project/:projectId/sample-dashboard", (req, res) => {
   const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(req.params.projectId);
   if (!project) return res.status(404).json({ error: "Project niet gevonden" });
