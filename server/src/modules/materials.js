@@ -1,6 +1,7 @@
 const express = require("express");
 const { db } = require("../db/database");
 const { id, uploadUrl } = require("./utils");
+const { record } = require("./audit");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
 
@@ -38,6 +39,27 @@ function hydrate(row) {
 router.get("/project/:projectId", (req, res) => {
   const rows = db.prepare("SELECT * FROM materials WHERE project_id = ? ORDER BY sort_order, name").all(req.params.projectId);
   res.json(rows.map(hydrate));
+});
+
+router.get("/project/:projectId/sample-dashboard", (req, res) => {
+  const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(req.params.projectId);
+  if (!project) return res.status(404).json({ error: "Project niet gevonden" });
+  const rows = db.prepare(`
+    SELECT m.id, m.name, m.spec, m.application, m.sample_status, m.sample_requested_at, m.sample_received_at,
+      m.supplier_id, COALESCE(s.name, '') AS supplier_name
+    FROM materials m
+    LEFT JOIN suppliers s ON s.id = m.supplier_id
+    WHERE m.project_id = ?
+    ORDER BY
+      CASE m.sample_status WHEN 'requested' THEN 0 WHEN 'received' THEN 1 ELSE 2 END,
+      m.sample_requested_at DESC,
+      m.name
+  `).all(req.params.projectId);
+  res.json({
+    requested: rows.filter((row) => row.sample_status === "requested"),
+    received: rows.filter((row) => row.sample_status === "received"),
+    none: rows.filter((row) => !row.sample_status || row.sample_status === "none")
+  });
 });
 
 router.post("/", upload.single("image"), validateForm(materialSchema), (req, res) => {
@@ -151,6 +173,54 @@ router.put("/:id", upload.single("image"), validateForm(materialSchema, { partia
   if (req.file && current.image_path && current.image_path !== req.file.path) {
     removeUpload(current.image_path);
   }
+  res.json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id)));
+});
+
+function currentMaterial(req, res) {
+  const current = db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id);
+  if (!current) {
+    res.status(404).json({ error: "Materiaal niet gevonden" });
+    return null;
+  }
+  return current;
+}
+
+router.post("/:id/sample/request", (req, res) => {
+  const current = currentMaterial(req, res);
+  if (!current) return;
+  if (current.sample_status !== "requested" && current.sample_status !== "received") {
+    db.prepare(`
+      UPDATE materials
+      SET sample_status = 'requested', sample_requested_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(req.params.id);
+    record("material", req.params.id, "sample_request");
+  }
+  res.json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id)));
+});
+
+router.post("/:id/sample/receive", (req, res) => {
+  const current = currentMaterial(req, res);
+  if (!current) return;
+  db.prepare(`
+    UPDATE materials
+    SET sample_status = 'received',
+        sample_requested_at = CASE WHEN sample_requested_at = '' OR sample_requested_at IS NULL THEN CURRENT_TIMESTAMP ELSE sample_requested_at END,
+        sample_received_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(req.params.id);
+  record("material", req.params.id, "sample_receive");
+  res.json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id)));
+});
+
+router.post("/:id/sample/reset", (req, res) => {
+  const current = currentMaterial(req, res);
+  if (!current) return;
+  db.prepare(`
+    UPDATE materials
+    SET sample_status = 'none', sample_requested_at = '', sample_received_at = ''
+    WHERE id = ?
+  `).run(req.params.id);
   res.json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id)));
 });
 
