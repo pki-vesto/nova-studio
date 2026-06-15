@@ -393,6 +393,96 @@ function ObjectsPanel({ ctx, plan }) {
   );
 }
 
+function FinishSchedulePanel({ room, fail }) {
+  const [bundle, setBundle] = useState(null);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!room?.id) {
+      setBundle(null);
+      return () => { cancelled = true; };
+    }
+    (async () => {
+      try {
+        const data = await api.get(`/api/rooms/${room.id}/finish-schedule`);
+        if (!cancelled) setBundle(data);
+      } catch (err) {
+        fail(err);
+        if (!cancelled) setBundle(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [room?.id]);
+
+  async function exportPdf() {
+    if (!room?.id) return;
+    setExporting(true);
+    try {
+      const out = await api.json(`/api/rooms/${room.id}/finish-schedule.pdf`, "POST", {});
+      if (out?.url) window.open(out.url, "_blank", "noopener,noreferrer");
+    } catch (err) { fail(err); } finally { setExporting(false); }
+  }
+
+  if (!room) return null;
+  const colors = bundle?.colors || [];
+  const materials = bundle?.materials || [];
+  const notes = bundle?.notes || {};
+
+  return (
+    <section style={{ marginTop: 56 }}>
+      <SectionHead kicker="Afwerkstaat"
+        title={`Specificatie voor ${room.name}`}
+        sub="Kleuren, materialen en notities samengebracht per ruimte."
+        right={<button className="btn btn-clay no-print" style={{ padding: "9px 13px" }} onClick={exportPdf} disabled={exporting}>
+          <Icon name="download" size={14} /> {exporting ? "Exporteren..." : "Exporteer PDF"}
+        </button>} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28, alignItems: "start" }}>
+        <div>
+          <h4 className="serif" style={{ fontSize: 19, margin: "0 0 14px" }}>Kleuren</h4>
+          {colors.length ? (
+            <div className="col gap3">
+              {colors.map((c) => (
+                <div key={c.id} className="row gap3 middle" style={{ paddingBottom: 10, borderBottom: "1px solid var(--line)" }}>
+                  <span style={{ width: 34, height: 34, borderRadius: "var(--r-sm)", background: c.resolved_hex || c.hex || "#ccc", flex: "none", border: "1px solid rgba(0,0,0,.08)" }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.resolved_name || c.name || c.library_name || "Kleur"}</div>
+                    <div className="caption">{[c.application, c.library_code, c.library_finish].filter(Boolean).join(" · ")}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <p className="caption">Geen kleuren vastgelegd.</p>}
+        </div>
+
+        <div>
+          <h4 className="serif" style={{ fontSize: 19, margin: "0 0 14px" }}>Materialen</h4>
+          {materials.length ? (
+            <div className="col gap3">
+              {materials.slice(0, 5).map((m) => (
+                <div key={m.id} style={{ paddingBottom: 10, borderBottom: "1px solid var(--line)" }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{m.name}</div>
+                  <div className="caption">{[m.spec, m.application, m.maintenance].filter(Boolean).join(" · ")}</div>
+                </div>
+              ))}
+            </div>
+          ) : <p className="caption">Geen materialen vastgelegd.</p>}
+        </div>
+      </div>
+
+      {(notes.concept || notes.color_notes || notes.designer_notes) && (
+        <div style={{ marginTop: 24, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
+          {notes.concept && <p className="body" style={{ fontSize: 14, margin: "0 0 8px" }}>{notes.concept}</p>}
+          {[notes.color_notes, notes.designer_notes].filter(Boolean).map((note, index) => (
+            <p key={index} className="caption" style={{ margin: "6px 0 0", lineHeight: 1.5 }}>{note}</p>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function FloorPlan({ ctx }) {
   const { project, floorplans, reload, fail } = ctx;
   const rooms = project.rooms || [];
@@ -403,6 +493,7 @@ export function FloorPlan({ ctx }) {
   const [versioning, setVersioning] = useState(false);
   const plan = floorplans[0];
   const caption = scaleCaption(plan);
+  const activeRoom = rooms[active] || rooms[0] || null;
 
   async function newVersion() {
     if (!plan) return;
@@ -455,6 +546,8 @@ export function FloorPlan({ ctx }) {
           ))}
         </div>
       </div>
+
+      <FinishSchedulePanel room={activeRoom} fail={fail} />
 
       {editRooms && <RoomsDrawer ctx={ctx} onClose={() => setEditRooms(false)} />}
       {editPlan && <PlanDrawer ctx={ctx} onClose={() => setEditPlan(false)} />}
