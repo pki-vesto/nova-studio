@@ -104,6 +104,7 @@ Geregistreerd in `schema_migrations` als **`2026-06-09-platform-expansion`**.
 - **`floorplans`**: `scale_ratio`, `scale_unit`, `version`, `thumb_path`.
 - **`intake`**: `scope_estimate`, `risks_json`, `followups_json`.
 - **`projects`**: `studio_id`, `owner_id`, `deleted_at` (soft-delete), `row_version` (optimistic concurrency).
+- **`clients`**: `studio_id`, `owner_id` voor ownership-scoping naast projectownership.
 
 ### Seed-gedrag bij migratie
 
@@ -113,4 +114,4 @@ Geregistreerd in `schema_migrations` als **`2026-06-09-platform-expansion`**.
 ### Opmerkingen
 
 - Migraties zijn **additief en idempotent**; herhaald draaien is veilig en de bestaande data blijft intact (`addColumn` guards, geen destructieve `DROP`/`ALTER`).
-- Ownership-kolommen (`projects.studio_id`/`owner_id`) bestaan maar worden nog niet afgedwongen of gebruikt om data te scopen.
+- Ownership-kolommen (`projects.studio_id`/`owner_id`, `clients.studio_id`/`owner_id`) worden afgedwongen zodra gebruikers bestaan: owner/admin mogen schrijven binnen de studio, members zijn read-only binnen hun ownershipscope.

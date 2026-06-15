@@ -74,7 +74,7 @@ npm run build   # release-build-check (Vite production build)
 
 ## Auth (optioneel)
 
-Nova Studio werkt standaard als single-user lokale tool zonder login. Zodra je via **Settings → Gebruikers** een eerste gebruiker aanmaakt (die wordt `owner`), verschijnt er een login-gate. De sessie-middleware blokkeert nooit zolang er geen gebruikers bestaan, dus bestaande installs blijven werken. Wachtwoorden worden lokaal gehasht (Node-crypto scrypt); rollen (owner/admin/member) bestaan maar worden nog **niet per route afgedwongen**.
+Nova Studio werkt standaard als single-user lokale tool zonder login. Zodra je via **Settings → Gebruikers** een eerste gebruiker aanmaakt (die wordt `owner`), verschijnt er een login-gate. De sessie-middleware blokkeert nooit zolang er geen gebruikers bestaan, dus bestaande installs blijven werken. Wachtwoorden worden lokaal gehasht (Node-crypto scrypt); rollen (owner/admin/member) worden per route afgedwongen. Owner/admin mogen domeindata schrijven binnen hun studio; members zijn read-only en zien alleen projecten/klanten binnen hun ownershipscope.
 
 ## AI
 
@@ -119,7 +119,7 @@ Kerndomeinen (V1); de uitgebreide platform-domeinen staan in **Platform** hierbo
 
 ## Aannames & grenzen
 
-- **Single-user blijft de default**, maar optionele multi-user auth/studio's bestaan (login pas actief zodra er gebruikers zijn). RBAC is nog niet per route afgedwongen.
+- **Single-user blijft de default**, maar optionele multi-user auth/studio's bestaan (login pas actief zodra er gebruikers zijn). RBAC en ownership-scoping zijn actief zodra gebruikers bestaan.
 - Geen volledige CAD: de plattegrond-editor ondersteunt muren, objecten op lagen en upload van bronbestanden — geen drag-canvas of IFC/BIM.
 - AI draait live tegen Claude alleen met `ANTHROPIC_API_KEY`; anders een eerlijk lokaal concept.
 - Render is een placeholder-provider; e-mailnotificaties worden gequeued maar niet verzonden.

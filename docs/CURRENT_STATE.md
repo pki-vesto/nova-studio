@@ -1,6 +1,6 @@
 # Nova Studio Current State
 
-Laatst bijgewerkt: 2026-06-09 (na de platform-expansie + de validatie-/foutafhandelingsiteratie).
+Laatst bijgewerkt: 2026-06-10 (na RBAC-/ownership-enforcement).
 
 Bronnen: code-inspectie van `/home/peter/nova-studio` — SQLite-schema (`server/src/db/schema.js`), Express-routes (`server/src/index.js` + `server/src/modules/*`), frontendschermen (`web/src/screens/*`, `web/src/App.jsx`), Docker-config en `npm test` (util- en API-integratietests).
 
@@ -14,7 +14,7 @@ Werkt: React/Vite app-shell met sidebar, topbar, globale zoekinput, projecttabs 
 
 Validatie & foutafhandeling: inputvalidatie is **gecentraliseerd** in `server/src/modules/validate.js` (`validateBody`/`validateForm`-middleware op zod-basis) en toegepast op de write-endpoints van vrijwel alle modules. Gevalideerde waarden worden gecoërceerd en teruggemerged op `req.body`, terwijl onbekende velden en de PUT-diff-checks intact blijven; schema's vermijden `.default()` zodat handler-fallbacks blijven werken. Elke API-fout deelt één envelope `{ error, details? }`. De globale error-handler in `server/src/index.js` mapt `ZodError` → 400 met `details`, multer `LIMIT_FILE_SIZE` → 413 en respecteert `err.status`.
 
-Getest: `npm test` draait util-, API-integratie-, validatie-, auth-/RBAC-, back-up-, flow- én notificatietests. Totaal **32 tests** (3 util + 5 API + 5 validate + 8 auth + 2 backup + 6 flows + 3 notificaties). De flow-tests (`flows.test.js`) dekken budget marge/btw-berekening, de portaal-goedkeuringsflow (incl. client-safe lekbescherming), soft-delete, optimistic concurrency (409), product-pricing/CSV en de AI lokale-fallback. `npm run build` is de release-build-check.
+Getest: `npm test` draait util-, API-integratie-, validatie-, auth-/RBAC-, authorization-, back-up-, flow- én notificatietests. Totaal **46 tests**. De authorization-tests dekken 401 zonder sessie, 403 voor member-writes, cross-owner project/client access, list filtering en forbidden-auditlogging. De flow-tests (`flows.test.js`) dekken budget marge/btw-berekening, de portaal-goedkeuringsflow (incl. client-safe lekbescherming), soft-delete, optimistic concurrency (409), product-pricing/CSV en de AI lokale-fallback. `npm run build` is de release-build-check.
 
 **Notificaties**: portaalreacties (klant keurt product goed/af of laat een opmerking achter) maken nu een in-app notificatie (`notifications`-tabel, `notify()`-helper) die de ontwerper ziet via een **bel met ongelezen-teller in de topbar** + paneel (`App.jsx`). Optioneel e-mailkanaal via een pluggable `mailer.js`: verstuurt alleen wanneer `NOVA_SMTP_URL` is gezet én `nodemailer` is geïnstalleerd, anders blijft de notificatie netjes in-app (geen geforceerde dependency, geen stille fake-send).
 
@@ -22,7 +22,7 @@ Live staat: Docker/Tailscale-config met app-service op poort 4000 en loopback sm
 
 ### Clients (incl. contacts/addresses UI)
 
-Werkt: klantenlijst met filter, klant aanmaken/bewerken/detail, projectcount + laatste project. Contact- en adres-API's (`client_contacts`, `client_addresses`) plus UI in het Klanten-scherm om contactpersonen en adressen te beheren.
+Werkt: klantenlijst met filter, klant aanmaken/bewerken/detail, projectcount + laatste project. Contact- en adres-API's (`client_contacts`, `client_addresses`) plus UI in het Klanten-scherm om contactpersonen en adressen te beheren. Zodra gebruikers bestaan worden klanten gestampt met `studio_id`/`owner_id`; lijsten en detailroutes filteren op ownershipscope en contact-/adresmutaties volgen de parent-klant.
 
 Getest: API-test "client aanmaken".
 
@@ -30,7 +30,7 @@ Live staat: lokale DB bevat 1 client.
 
 ### Projects (soft-delete, optimistic concurrency, volledige duplicatie)
 
-Werkt: projectlijst met statusfilter en templatefilter, aanmaken met bestaande/nieuwe klant, detail, metadata bewerken, hero-upload, archiveren/herstellen. **Soft-delete** (`deleted_at`, met `/undelete`) — lijst filtert verwijderde projecten weg. **Optimistic concurrency** via `row_version` (409 bij conflict, backward-compatible als er geen versie wordt meegestuurd). **Volledige duplicatie**: kopieert nu project, intake, rooms (met id-remap), materials, moodboards + assets en productselecties. Sample-project endpoint (`/seed-sample`).
+Werkt: projectlijst met statusfilter en templatefilter, aanmaken met bestaande/nieuwe klant, detail, metadata bewerken, hero-upload, archiveren/herstellen. Zodra gebruikers bestaan worden projecten gestampt met `studio_id`/`owner_id`; lijsten/detailroutes filteren op ownershipscope en project-scoped childroutes worden via centrale authorization gecontroleerd. **Soft-delete** (`deleted_at`, met `/undelete`) — lijst filtert verwijderde projecten weg. **Optimistic concurrency** via `row_version` (409 bij conflict, backward-compatible als er geen versie wordt meegestuurd). **Volledige duplicatie**: kopieert nu project, intake, rooms (met id-remap), materials, moodboards + assets en productselecties. Sample-project endpoint (`/seed-sample`).
 
 Getest: API-test "project aanmaken met nieuwe klant en in lijst zichtbaar".
 
@@ -158,9 +158,9 @@ Live staat: AI uitgeschakeld; geen jobs.
 
 ### Auth (users/studios/memberships/sessions — optioneel)
 
-Werkt: **`studios` / `users` / `memberships` / `sessions`**. Lokaal scrypt-wachtwoordhashing (Node-crypto, geen externe provider), register/login/logout, sessie-token (30 dagen), gebruikersbeheer (CRUD) en rollen (owner/admin/member). **Afdwinging**: de API-gate (`auth.apiGate`, gemount op `/api`) eist een geldige sessie zodra er één of meer gebruikers bestaan; in single-user modus (0 gebruikers) blijft alles open. De gate whitelist `/api/health`, `/api/auth/*` en de publieke `/api/portal/view/*`. **RBAC**: gebruikersbeheer (`POST/PUT/DELETE /users`) vereist rol `owner`/`admin` (`requireRole`). **Brute-force-bescherming**: 5 mislukte logins per e-mail+client → 15 min lockout (429). De frontend valt bij een 401 mid-sessie (verlopen/ingetrokken token) automatisch terug op de login-gate (`api.js` ruimt de token op en seint `App.jsx`). Beheer via Settings → Gebruikers; login-gate in `App.jsx` en `Login.jsx`.
+Werkt: **`studios` / `users` / `memberships` / `sessions`**. Lokaal scrypt-wachtwoordhashing (Node-crypto, geen externe provider), register/login/logout, sessie-token (30 dagen), gebruikersbeheer (CRUD) en rollen (owner/admin/member). **Afdwinging**: de API-gate (`auth.apiGate`, gemount op `/api`) eist een geldige sessie zodra er één of meer gebruikers bestaan; in single-user modus (0 gebruikers) blijft alles open. De gate whitelist `/api/health`, `/api/auth/*` en de publieke `/api/portal/view/*`. **RBAC/ownership**: `authorization.routeGate` dwingt owner/admin-writebeleid af op write-routes, laat members read-only werken binnen hun project-/klantownershipscope en schrijft forbidden-beslissingen naar de auditlog. Gebruikersbeheer (`POST/PUT/DELETE /users`) vereist rol `owner`/`admin` (`requireRole`) met extra owner-lockoutregels. **Brute-force-bescherming**: 5 mislukte logins per e-mail+client → 15 min lockout (429). De frontend valt bij een 401 mid-sessie (verlopen/ingetrokken token) automatisch terug op de login-gate (`api.js` ruimt de token op en seint `App.jsx`). Beheer via Settings → Gebruikers; login-gate in `App.jsx` en `Login.jsx`.
 
-Getest: `auth.test.js` — open in single-user modus, 401 zonder sessie zodra een gebruiker bestaat, whitelist blijft open, geldige sessie passeert, audit-attributie, member-403 op gebruikersbeheer, en login brute-force-lockout (429 na 5 mislukte pogingen).
+Getest: `auth.test.js` en `authorization.test.js` — open in single-user modus, 401 zonder sessie zodra een gebruiker bestaat, whitelist blijft open, geldige sessie passeert, audit-attributie, member-403 op gebruikersbeheer en domeinwrites, cross-owner project/client 403, scope-filtering voor lijsten, en login brute-force-lockout (429 na 5 mislukte pogingen).
 
 Live staat: geen gebruikers (single-user modus → API open, geen gedragswijziging).
 
@@ -206,19 +206,18 @@ Live staat: nog geen back-ups gemaakt op de live instance.
 
 ## Technische Schuld (eerlijk)
 
-- **Authenticatie wordt nu afgedwongen** zodra er gebruikers bestaan (`auth.apiGate`): zonder geldige sessie → 401. RBAC is voorlopig grofkorrelig — élke geauthenticeerde gebruiker heeft volledige toegang tot de domein-API; alleen gebruikersbeheer is rol-gated (`owner`/`admin`). Fijnmazige rol-checks per domein zijn nog niet aanwezig.
-- **Ownership-kolommen worden niet afgedwongen.** `projects.studio_id`/`owner_id` bestaan maar worden nog niet gebruikt om data te scopen of te filteren — alle ingelogde gebruikers zien alle projecten. Dit is de volgende stap voor echt multi-tenant gebruik.
+- **RBAC/ownership is nu centraal afgedwongen voor projecten en klanten plus project-scoped childroutes.** Productbibliotheek/supplier/global-library data blijft studiobreed: owner/admin mogen schrijven, members zijn read-only.
 - **Login heeft brute-force-lockout** (5 mislukte pogingen per e-mail+client → 15 min lock, in-memory). Nog open voor publiek internet: CSRF en gedeelde/persistente rate-limit-store bij meerdere processen.
 - **Render is een placeholder-provider** (SVG-label). Er is geen echte beeld-/3D-render; een echte provider plugt in via de adapter.
 - **AI draait alleen live tegen Anthropic als `ANTHROPIC_API_KEY` is gezet** én AI is ingeschakeld; anders een eerlijk lokaal concept. Geen andere providers geïmplementeerd.
 - **E-mailverzending vereist configuratie**: portaalreacties verschijnen altijd in-app (bel + paneel). E-mail wordt alleen verstuurd wanneer `NOVA_SMTP_URL` is gezet én `nodemailer` is geïnstalleerd; anders blijft het bij in-app (`sent = 0`). Bewust geen geforceerde mail-dependency.
 - **Validatie is nu gecentraliseerd** via `validate.js` en toegepast op de write-endpoints van vrijwel alle modules; alle API-fouten delen het envelope `{ error, details? }`. `projects` en `auth` gebruiken nog eigen inline zod-schema's (`safeParse`) i.p.v. de gedeelde middleware, maar leveren hetzelfde foutcontract.
-- **Testdekking groeit, maar mist nog frontend/e2e**: backend-kernflows zijn nu gedekt (28 tests: API, validatie, auth/RBAC, back-up, budget/portal/concurrency/CSV/AI). Nog geen React-component-/e2e-/PDF-visual-tests.
+- **Testdekking groeit, maar mist nog frontend/e2e**: backend-kernflows zijn nu gedekt (46 tests: API, validatie, auth/RBAC, authorization, back-up, budget/portal/concurrency/CSV/AI). Nog geen React-component-/e2e-/PDF-visual-tests.
 - **Geen pagination/filtering-standaard** op de lijst-endpoints (datasets zijn nog klein).
 
 ## Hoogste Prioriteiten (nu het meest waardevol)
 
-1. **Ownership-scoping**: `projects.owner_id`/`studio_id` benutten om data per gebruiker/studio te filteren (nu ziet elke ingelogde gebruiker alles). Logische vervolgstap op de zojuist afgedwongen auth.
+1. **Frontend/e2e-auth checks**: de backend dekt RBAC/ownership, maar er zijn nog geen browserflows die login, member-read-only gedrag en 403-UI controleren.
 2. **Echte render-provider** koppelen via de bestaande adapter (beeldgeneratie of 3D).
 3. **Live AI-sleutel** configureren + de flows aanscherpen; reviewstatus in de UI verankeren.
 4. **Drag-gebaseerde editors** voor moodboard-layout en floorplan-objecten (nu vooral form-based CRUD).

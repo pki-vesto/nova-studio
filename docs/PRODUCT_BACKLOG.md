@@ -8,16 +8,18 @@ Legenda:
 - **Scaffolded** — structuur/adapter staat, echte externe integratie nog niet (bv. 3D-render, e-mailverzending, live AI zonder key).
 - **Not Started** — nog niet gebouwd.
 
-## Leverstatus 2026-06-09
+## Leverstatus 2026-06-10
 
 Na de platform-expansie:
 - **V1 (Foundation)** — in essentie compleet.
 - **V2 (Professional Workflow + Design Intelligence)** — grotendeels gebouwd (proposals met secties/versies/status, presentation-config, suppliers, globale color/material libraries, productprijzen/marge/btw/varianten/CSV, budget, intake-UI, media-metadata, command palette, routing, auditlog, soft-delete, optimistic concurrency).
-- **V3 (Knowledge + AI + Future Systems)** — gebouwd als functionele fundamenten met eerlijke scaffolding waar externe integratie nodig is: AI draait live tegen Claude alleen met `ANTHROPIC_API_KEY` (anders een eerlijk lokaal concept), render is een placeholder-provider, e-mailnotificaties worden gequeued maar niet verzonden, en auth/RBAC bestaat maar wordt niet per route afgedwongen.
+- **V3 (Knowledge + AI + Future Systems)** — gebouwd als functionele fundamenten met eerlijke scaffolding waar externe integratie nodig is: AI draait live tegen Claude alleen met `ANTHROPIC_API_KEY` (anders een eerlijk lokaal concept), render is een placeholder-provider, e-mailnotificaties worden gequeued maar niet verzonden, en auth/RBAC wordt per route afgedwongen zodra gebruikers bestaan.
 
 De meeste items 56–276 zijn **Completed** of **Partial**. Uitzonderingen die **Not Started** blijven zijn expliciet als zodanig gemarkeerd; het Future Vision-blok (281–300) is volledig **Not Started**.
 
 Addendum (validatie-/foutafhandelingsiteratie, 2026-06-09): de gecentraliseerde validatielaag (`validate.js`) en het gestandaardiseerde API-foutformaat `{ error, details? }` zijn geland — items 196 en 197 zijn nu **Completed**.
+
+Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/403-paden, owner/admin-writebeleid en project-/client-ownershipscope zodra gebruikers bestaan. Projecten en klanten krijgen `studio_id`/`owner_id` bij aanmaak; project- en clientlijsten filteren op de zichtbare scope.
 
 ## V1
 
@@ -233,8 +235,8 @@ Addendum (validatie-/foutafhandelingsiteratie, 2026-06-09): de gecentraliseerde 
 204. [Completed] Auth provider kiezen voor self-hosted. (Node-crypto scrypt, lokaal)
 205. [Completed] Login UI bouwen.
 206. [Completed] Session middleware toevoegen. (optioneel, niet-blokkerend)
-207. [Completed] Ownership op hoofdtabellen toevoegen. (kolommen aanwezig; nog niet afgedwongen)
-208. [Partial] Role based access control implementeren. (auth afgedwongen zodra gebruikers bestaan via `auth.apiGate`; gebruikersbeheer rol-gated owner/admin; fijnmazige per-domein rol-checks nog niet)
+207. [Completed] Ownership op hoofdtabellen toevoegen. (projecten en klanten hebben `studio_id`/`owner_id`; routes filteren/valideren ownership zodra gebruikers bestaan)
+208. [Completed] Role based access control implementeren. (`auth.apiGate` + `authorization.routeGate`: 401 zonder sessie, 403 voor member-writes, owner/admin-writebeleid, audit-log bij forbidden)
 209. [Completed] Multi-user auditlog tonen. (auditlog + API + Activiteit-scherm; mutaties toegeschreven aan acteur via AsyncLocalStorage)
 210. [Completed] Optimistic concurrency voor projectbewerkingen. (row_version, 409 bij conflict)
 211. [Completed] Klantportaal datamodel ontwerpen.
