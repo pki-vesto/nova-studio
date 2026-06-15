@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
 import { money } from "../lib/format.js";
@@ -11,11 +11,22 @@ function ProductDrawer({ ctx, product, onClose }) {
   const [form, setForm] = useState({
     name: product?.name || "", brand: product?.brand || "", designer: product?.designer || "",
     supplier: product?.supplier || "", category: product?.category || "", price: product?.price || "",
+    purchase_price: product?.purchase_price || "", sale_price: product?.sale_price || "",
     webshop_url: product?.webshop_url || "", description: product?.description || ""
   });
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [history, setHistory] = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  useEffect(() => {
+    let alive = true;
+    if (!editing) { setHistory([]); return undefined; }
+    api.get(`/api/products/${product.id}/price-history`)
+      .then((rows) => { if (alive) setHistory(rows || []); })
+      .catch((err) => fail(err));
+    return () => { alive = false; };
+  }, [editing, product?.id]);
 
   async function save() {
     if (!form.name.trim()) return;
@@ -43,10 +54,33 @@ function ProductDrawer({ ctx, product, onClose }) {
         </div>
         <div className="form-grid form-grid-2">
           <Field label="Richtprijs (€)"><input type="number" step="0.01" value={form.price} onChange={set("price")} placeholder="4890" /></Field>
+          <Field label="Inkoopprijs (€)"><input type="number" step="0.01" value={form.purchase_price} onChange={set("purchase_price")} placeholder="3200" /></Field>
+          <Field label="Verkoopprijs (€)"><input type="number" step="0.01" value={form.sale_price} onChange={set("sale_price")} placeholder="4890" /></Field>
           <Field label="Webshoplink"><input value={form.webshop_url} onChange={set("webshop_url")} placeholder="https://" /></Field>
         </div>
         <Field label="Omschrijving / motivatie"><textarea value={form.description} onChange={set("description")} rows={3} /></Field>
         <Field label="Productfoto"><input type="file" accept="image/*" onChange={(e) => setFile(e.target.files[0])} /></Field>
+        {editing ? (
+          <section style={{ borderTop: "1px solid var(--line)", paddingTop: 18 }}>
+            <Kicker style={{ marginBottom: 10 }}>Prijsgeschiedenis</Kicker>
+            {history.length ? (
+              <div className="stack" style={{ gap: 8 }}>
+                {history.map((row) => (
+                  <div key={row.id} className="row between middle" style={{ padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+                    <div>
+                      <div className="caption">{new Date(row.changed_at).toLocaleDateString("nl-NL")}</div>
+                      <div className="body" style={{ margin: "2px 0 0" }}>{row.note || "Prijswijziging"}</div>
+                    </div>
+                    <div className="caption" style={{ textAlign: "right" }}>
+                      <div>Richt {money(row.price || 0)} · Verkoop {money(row.sale_price || 0)}</div>
+                      <div>Inkoop {money(row.purchase_price || 0)} · Marge {money(row.margin || 0)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="caption" style={{ margin: 0 }}>Nog geen prijsgeschiedenis.</p>}
+          </section>
+        ) : null}
       </div>
     </EditDrawer>
   );

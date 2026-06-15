@@ -27,6 +27,7 @@ app.use("/api/clients", require("./clients"));
 app.use("/api/projects", require("./projects"));
 app.use("/api/products", require("./products"));
 app.use("/api/proposals", require("./proposals"));
+app.use("/api/audit", require("./audit").router);
 app.use((err, _req, res, _next) => res.status(err.name === "ZodError" ? 400 : 500).json({ error: err.message }));
 
 let base;
@@ -66,6 +67,25 @@ test("productselectie en shoppinglijst totaal", async () => {
   const shopping = await (await j(`/api/products/shopping-list/${project.id}`)).json();
   assert.equal(shopping.items.length, 1);
   assert.equal(shopping.total, 2000, "2 × €1000");
+});
+
+test("product price history captures create and real price changes only", async () => {
+  const product = await (await j("/api/products", "POST", { name: "Historie bank", price: 1000, purchase_price: 700, sale_price: 1200 })).json();
+  const changed = await j(`/api/products/${product.id}`, "PUT", { name: product.name, price: 1000, purchase_price: 700, sale_price: 1300 });
+  assert.equal(changed.status, 200);
+  const noop = await j(`/api/products/${product.id}`, "PUT", { name: product.name, price: 1000, purchase_price: 700, sale_price: 1300 });
+  assert.equal(noop.status, 200);
+
+  const history = await (await j(`/api/products/${product.id}/price-history`)).json();
+  assert.equal(history.length, 2);
+  assert.equal(Number(history[0].sale_price), 1300);
+  assert.equal(Number(history[0].purchase_price), 700);
+  assert.equal(Number(history[0].price), 1000);
+  assert.equal(Number(history[0].margin), 600);
+  assert.equal(Number(history[1].sale_price), 1200);
+
+  const auditRows = await (await j(`/api/audit?entity=product&entity_id=${product.id}`)).json();
+  assert.ok(auditRows.some((row) => row.action === "price_change"));
 });
 
 test("voorstel aanmaken, secties geseed en PDF-export", async () => {

@@ -3,6 +3,7 @@ const { db } = require("../db/database");
 const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
+const audit = require("./audit");
 
 const router = express.Router();
 
@@ -81,6 +82,29 @@ function computeMargin(salePrice, purchasePrice) {
   return (sale > 0 && purchase > 0) ? sale - purchase : 0;
 }
 
+function pricesChanged(current, next) {
+  return ["purchase_price", "sale_price", "price"].some((key) => Number(current?.[key] || 0) !== Number(next?.[key] || 0));
+}
+
+function recordPriceHistory(productId, prices, note = "") {
+  try {
+    db.prepare(`
+      INSERT INTO product_price_history (id, product_id, purchase_price, sale_price, price, margin, note)
+      VALUES (@id, @product_id, @purchase_price, @sale_price, @price, @margin, @note)
+    `).run({
+      id: id("price"),
+      product_id: productId,
+      purchase_price: Number(prices.purchase_price || 0),
+      sale_price: Number(prices.sale_price || 0),
+      price: Number(prices.price || 0),
+      margin: computeMargin(prices.sale_price, prices.purchase_price),
+      note
+    });
+  } catch {
+    // Price history is audit-like: it must never break the primary write.
+  }
+}
+
 // Quote a single CSV cell: wrap in quotes and double inner quotes when it
 // contains a comma, quote, or newline. Keeps numbers/plain text untouched.
 function csvCell(value) {
@@ -138,10 +162,21 @@ router.get("/", (_req, res) => {
   `).all());
 });
 
+router.get("/:id/price-history", (req, res) => {
+  const product = db.prepare("SELECT id FROM products WHERE id = ?").get(req.params.id);
+  if (!product) return res.status(404).json({ error: "Product niet gevonden" });
+  res.json(db.prepare(`
+    SELECT * FROM product_price_history
+    WHERE product_id = ?
+    ORDER BY changed_at DESC, rowid DESC
+  `).all(req.params.id));
+});
+
 router.post("/", upload.single("image"), validateForm(productSchema), (req, res) => {
   const productId = id("product");
   const salePrice = Number(req.body.sale_price || 0);
   const purchasePrice = Number(req.body.purchase_price || 0);
+  const price = Number(req.body.price || 0);
   db.prepare(`
     INSERT INTO products (id, name, brand, supplier, category, collection, sku, dimensions, lead_time, designer, alternative_to_id, image_path, price, webshop_url, description, notes, tags, status, supplier_id, parent_product_id, purchase_price, sale_price, margin, vat_rate, availability_status, price_date)
     VALUES (@id, @name, @brand, @supplier, @category, @collection, @sku, @dimensions, @lead_time, @designer, @alternative_to_id, @image_path, @price, @webshop_url, @description, @notes, @tags, @status, @supplier_id, @parent_product_id, @purchase_price, @sale_price, @margin, @vat_rate, @availability_status, @price_date)
@@ -158,7 +193,7 @@ router.post("/", upload.single("image"), validateForm(productSchema), (req, res)
     designer: req.body.designer || "",
     alternative_to_id: req.body.alternative_to_id || null,
     image_path: req.file?.path || "",
-    price: Number(req.body.price || 0),
+    price,
     webshop_url: req.body.webshop_url || "",
     description: req.body.description || "",
     notes: req.body.notes || "",
@@ -173,6 +208,7 @@ router.post("/", upload.single("image"), validateForm(productSchema), (req, res)
     availability_status: req.body.availability_status || "unknown",
     price_date: req.body.price_date || ""
   });
+  recordPriceHistory(productId, { purchase_price: purchasePrice, sale_price: salePrice, price }, "initial");
   res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(productId));
 });
 
@@ -181,6 +217,9 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
   if (!current) return res.status(404).json({ error: "Product niet gevonden" });
   const salePrice = Number(req.body.sale_price ?? current.sale_price ?? 0);
   const purchasePrice = Number(req.body.purchase_price ?? current.purchase_price ?? 0);
+  const price = Number(req.body.price ?? current.price);
+  const nextPrices = { purchase_price: purchasePrice, sale_price: salePrice, price };
+  const changedPrice = pricesChanged(current, nextPrices);
   db.prepare(`
     UPDATE products SET
       name = @name,
@@ -223,7 +262,7 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
     designer: req.body.designer ?? current.designer,
     alternative_to_id: req.body.alternative_to_id || null,
     image_path: req.file?.path || current.image_path,
-    price: Number(req.body.price ?? current.price),
+    price,
     webshop_url: req.body.webshop_url ?? current.webshop_url,
     description: req.body.description ?? current.description,
     notes: req.body.notes ?? current.notes,
@@ -240,6 +279,10 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
   });
   if (req.file && current.image_path && current.image_path !== req.file.path) {
     removeUpload(current.image_path);
+  }
+  if (changedPrice) {
+    recordPriceHistory(req.params.id, nextPrices, "price update");
+    audit.record("product", req.params.id, "price_change", nextPrices);
   }
   res.json(db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id));
 });
@@ -266,6 +309,7 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
   const variantId = id("product");
   const salePrice = Number(req.body.sale_price || 0);
   const purchasePrice = Number(req.body.purchase_price || 0);
+  const price = Number(req.body.price || 0);
   db.prepare(`
     INSERT INTO products (id, name, brand, supplier, category, collection, sku, dimensions, lead_time, designer, alternative_to_id, image_path, price, webshop_url, description, notes, tags, status, supplier_id, parent_product_id, purchase_price, sale_price, margin, vat_rate, availability_status, price_date)
     VALUES (@id, @name, @brand, @supplier, @category, @collection, @sku, @dimensions, @lead_time, @designer, @alternative_to_id, @image_path, @price, @webshop_url, @description, @notes, @tags, @status, @supplier_id, @parent_product_id, @purchase_price, @sale_price, @margin, @vat_rate, @availability_status, @price_date)
@@ -282,7 +326,7 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
     designer: req.body.designer || "",
     alternative_to_id: req.body.alternative_to_id || null,
     image_path: req.file?.path || "",
-    price: Number(req.body.price || 0),
+    price,
     webshop_url: req.body.webshop_url || "",
     description: req.body.description || "",
     notes: req.body.notes || "",
@@ -297,6 +341,7 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
     availability_status: req.body.availability_status || "unknown",
     price_date: req.body.price_date || ""
   });
+  recordPriceHistory(variantId, { purchase_price: purchasePrice, sale_price: salePrice, price }, "initial");
   res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(variantId));
 });
 

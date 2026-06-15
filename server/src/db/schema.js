@@ -162,6 +162,17 @@ function migrate() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS product_price_history (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      purchase_price REAL,
+      sale_price REAL,
+      price REAL,
+      margin REAL,
+      changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      note TEXT DEFAULT ''
+    );
+
     CREATE TABLE IF NOT EXISTS proposals (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
