@@ -390,6 +390,15 @@ function ManageBar({ ctx, proposal, onSelectVersion }) {
     } catch (err) { fail(err); }
     finally { setExportBusy(""); }
   }
+  async function exportHandover() {
+    setExportBusy("handover");
+    try {
+      const result = await api.json(`/api/proposals/${proposal.project_id}/handover-pdf`, "POST", {});
+      if (result && result.url) window.open(result.url, "_blank");
+      setExportKey((k) => k + 1);
+    } catch (err) { fail(err); }
+    finally { setExportBusy(""); }
+  }
 
   return (
     <div className="no-print" style={{ marginBottom: 24 }}>
@@ -419,6 +428,7 @@ function ManageBar({ ctx, proposal, onSelectVersion }) {
           <span style={{ flex: 1 }} />
           <button className="btn btn-ghost" onClick={() => exportPdf("client")} disabled={!!exportBusy}><Icon name="download" size={15} /> {exportBusy === "client" ? "Bezig…" : "Klantversie (PDF)"}</button>
           <button className="btn btn-ghost" onClick={() => exportPdf("internal")} disabled={!!exportBusy}><Icon name="download" size={15} /> {exportBusy === "internal" ? "Bezig…" : "Interne versie (PDF)"}</button>
+          <button className="btn btn-ghost" onClick={exportHandover} disabled={!!exportBusy}><Icon name="download" size={15} /> {exportBusy === "handover" ? "Bezig…" : "Projectoverdracht exporteren"}</button>
         </div>
       </div>
 

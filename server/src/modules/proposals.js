@@ -680,4 +680,148 @@ router.get("/project/:projectId", (req, res) => {
   res.json(db.prepare("SELECT * FROM proposals WHERE project_id = ? ORDER BY updated_at DESC").all(req.params.projectId));
 });
 
+// ---------------------------------------------------------------------------
+// Project handover PDF — bundled close-out artefact (rooms + materials +
+// selected products + project-document index), always rendered client-safe.
+// ---------------------------------------------------------------------------
+
+// Date in Europe/Amsterdam, formatted YYYY-MM-DD for filename + cover.
+function todayAmsterdam() {
+  const fmt = new Intl.DateTimeFormat("nl-NL", {
+    timeZone: "Europe/Amsterdam", year: "numeric", month: "2-digit", day: "2-digit"
+  });
+  const parts = fmt.formatToParts(new Date()).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function projectDocuments(projectId) {
+  return db.prepare(
+    "SELECT id, kind, title, file_name, created_at FROM project_documents WHERE project_id = ? ORDER BY created_at DESC"
+  ).all(projectId);
+}
+
+// Strip internal-only price fields (purchase_price, margin) before rendering,
+// mirroring the audience='client' filtering applied elsewhere.
+function clientSafeProducts(products) {
+  return products.map((p) => ({
+    name: p.name,
+    brand: p.brand,
+    supplier: p.supplier,
+    category: p.category,
+    room_name: p.room_name,
+    quantity: p.quantity,
+    fit_reason: p.fit_reason,
+    price: Number(p.sale_price || p.price || 0)
+  }));
+}
+
+function renderHandoverCover(doc, project, dateLabel) {
+  doc.rect(0, 0, 595, 842).fill("#f7f2ec");
+  doc.fillColor("#2d2926").font("Helvetica-Bold").fontSize(34)
+    .text("Projectoverdracht", 54, 100, { width: 420 });
+  doc.font("Helvetica").fontSize(20).fillColor("#2d2926")
+    .text(project.title || "", 54, 156, { width: 480 });
+  doc.font("Helvetica").fontSize(13).fillColor("#6f655c")
+    .text(project.client_name || "", 54, 232);
+  doc.fontSize(10).fillColor("#6f655c").text(project.address || "", 54, 254);
+  doc.fontSize(10).fillColor("#a47755").text(dateLabel, 54, 278);
+  doc.font("Helvetica-Bold").fontSize(12).fillColor("#a47755")
+    .text("Nova Studio · klantoverdracht", 54, 720);
+}
+
+function renderHandoverMaterials(doc, materials) {
+  if (!materials.length) {
+    warn(doc, "Geen materialen vastgelegd voor dit project");
+    return;
+  }
+  renderTable(doc, [
+    { label: "Materiaal", width: 170 },
+    { label: "Specificatie", width: 184 },
+    { label: "Toepassing", width: 150 }
+  ], materials.map((m) => [m.name, m.spec || "", m.application || ""]));
+}
+
+function renderHandoverProducts(doc, products) {
+  if (!products.length) {
+    warn(doc, "Nog geen producten geselecteerd voor dit project");
+    return;
+  }
+  renderTable(doc, [
+    { label: "Product", width: 220 },
+    { label: "Ruimte", width: 130 },
+    { label: "Aantal", width: 70, align: "right" },
+    { label: "Stukprijs", width: 84, align: "right" }
+  ], products.map((item) => [
+    [item.name, item.brand].filter(Boolean).join(" — "),
+    item.room_name || "",
+    String(item.quantity || 1),
+    `EUR ${Number(item.price || 0).toFixed(2)}`
+  ]));
+}
+
+function renderHandoverDocuments(doc, documents) {
+  if (!documents.length) {
+    warn(doc, "Geen projectdocumenten vastgelegd");
+    return;
+  }
+  documents.forEach((d) => {
+    const label = (d.title && String(d.title).trim()) || d.file_name || "(zonder titel)";
+    const kindNote = d.kind ? ` (${d.kind})` : "";
+    doc.font("Helvetica").fontSize(10).fillColor("#2d2926")
+      .text(`• ${label}${kindNote}`, { lineGap: 4 });
+  });
+}
+
+function renderHandoverPdf(bundle, documents, outputPath, opts = {}) {
+  const dateLabel = opts.dateLabel || todayAmsterdam();
+  return new Promise((resolve, reject) => {
+    // compress: false keeps the PDF text streams uncompressed so client-safe
+    // assertions can scan the buffer (matches the finish-schedule export).
+    const doc = new PDFDocument({
+      size: "A4", margin: 54, compress: false,
+      info: { Title: `Projectoverdracht - ${bundle.project.title || ""}` }
+    });
+    const stream = fs.createWriteStream(outputPath);
+    stream.on("finish", resolve);
+    stream.on("error", reject);
+    doc.pipe(stream);
+
+    renderHandoverCover(doc, bundle.project, dateLabel);
+
+    doc.addPage();
+    writeSection(doc, "Ruimtes");
+    renderRooms(doc, bundle);
+
+    pageBreakIfNeeded(doc);
+    writeSection(doc, "Materialen");
+    renderHandoverMaterials(doc, bundle.materials);
+
+    doc.addPage();
+    writeSection(doc, "Geselecteerde producten");
+    renderHandoverProducts(doc, clientSafeProducts(bundle.products));
+
+    pageBreakIfNeeded(doc);
+    writeSection(doc, "Projectdocumenten");
+    renderHandoverDocuments(doc, documents);
+
+    doc.end();
+  });
+}
+
+router.post("/:projectId/handover-pdf", async (req, res) => {
+  const bundle = projectBundle(req.params.projectId);
+  if (!bundle) return res.status(404).json({ error: "Project niet gevonden" });
+  const documents = projectDocuments(req.params.projectId);
+  const dateLabel = todayAmsterdam();
+  const fileName = `${slug(bundle.project.title)}-overdracht-${dateLabel}.pdf`;
+  const outputPath = path.join(exportDir, fileName);
+  try {
+    await renderHandoverPdf(bundle, documents, outputPath, { dateLabel });
+  } catch (err) {
+    try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
+    return res.status(500).json({ error: err.message || "Overdracht-PDF kon niet gegenereerd worden" });
+  }
+  res.json({ url: `/exports/${fileName}`, path: outputPath, filename: fileName, kind: "handover" });
+});
+
 module.exports = router;

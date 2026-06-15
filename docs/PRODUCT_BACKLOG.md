@@ -269,7 +269,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 238. [Partial] Room specification sheet. (roomvelden + appendices; geen aparte spec-sheet-export)
 239. [Not Started] Room finish schedule.
 240. [Partial] Installation notes per room. (designer_notes; geen aparte installatie-sectie)
-241. [Partial] Project handover package. (documenten + PDF; geen gebundelde handover-export)
+241. [Completed] Project handover package. (gebundelde handover-PDF met ruimtes, materialen, geselecteerde producten en projectdocumenten-index)
 242. [Completed] Knowledge nodes tabel.
 243. [Completed] Knowledge edges tabel.
 244. [Completed] Knowledge source references.
