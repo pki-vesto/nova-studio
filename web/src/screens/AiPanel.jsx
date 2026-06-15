@@ -14,6 +14,12 @@ const FLOWS = [
   { value: "knowledge_retrieval", label: "Kennis-retrieval" }
 ];
 const flowLabel = (value) => FLOWS.find((f) => f.value === value)?.label || value;
+const PROPOSAL_SECTIONS = [
+  { key: "intro", label: "Intro" },
+  { key: "style", label: "Stijl" },
+  { key: "rationale", label: "Rationale" },
+  { key: "next-steps", label: "Vervolg" }
+];
 
 // Review status → Dutch label + brand colour for the tag.
 const REVIEW = {
@@ -77,7 +83,7 @@ function JobMeta({ job }) {
   return <div className="caption">{parts.join("  ·  ")}</div>;
 }
 
-function JobCard({ job, busy, onApprove, onReject, onRegenerate, onDelete }) {
+function JobCard({ job, busy, onApprove, onReject, onRegenerate, onRegenerateSection, onDelete }) {
   return (
     <div className="card" style={{ padding: 24 }}>
       <div className="row between middle wrap gap2" style={{ marginBottom: 14 }}>
@@ -92,6 +98,16 @@ function JobCard({ job, busy, onApprove, onReject, onRegenerate, onDelete }) {
       <JobBody job={job} />
 
       <div className="hr" style={{ margin: "18px 0 14px" }} />
+
+      {job.flow === "proposal_writing" && (
+        <div className="row wrap gap2" style={{ marginBottom: 14 }}>
+          {PROPOSAL_SECTIONS.map((section) => (
+            <button key={section.key} className="btn btn-ghost" style={{ padding: "6px 10px" }} disabled={busy} onClick={() => onRegenerateSection(job, section.key)}>
+              <Icon name="spark" size={13} /> Regenereer {section.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="row between middle wrap gap2">
         <JobMeta job={job} />
@@ -152,6 +168,15 @@ export function AiPanel({ ctx }) {
     try {
       const fresh = await api.json(`/api/ai/jobs/${job.id}/regenerate`, "POST", {});
       // Prepend the new job optimistically, then resync from server.
+      if (fresh && fresh.id) setJobs((prev) => [fresh, ...prev]);
+      await loadJobs();
+    } catch (err) { fail(err); } finally { setBusyId(null); }
+  }
+
+  async function regenerateSection(job, section) {
+    setBusyId(job.id);
+    try {
+      const fresh = await api.json(`/api/ai/jobs/${job.id}/regenerate-section`, "POST", { section });
       if (fresh && fresh.id) setJobs((prev) => [fresh, ...prev]);
       await loadJobs();
     } catch (err) { fail(err); } finally { setBusyId(null); }
@@ -280,6 +305,7 @@ export function AiPanel({ ctx }) {
               onApprove={(j) => review(j, "approved")}
               onReject={(j) => review(j, "rejected")}
               onRegenerate={regenerate}
+              onRegenerateSection={regenerateSection}
               onDelete={remove} />
           ))}
         </div>

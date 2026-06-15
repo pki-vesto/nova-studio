@@ -122,3 +122,22 @@ test("AI run falls back to an honest local draft when no API key is set", async 
   const jobs = (await j(`/api/ai/jobs?project_id=${project.id}`)).body;
   assert.ok(jobs.some((x) => x.id === run.body.id), "job persisted and listable");
 });
+
+test("AI proposal section regenerate creates local section job and validates section", async () => {
+  const project = (await j("/api/projects", "POST", { title: "Sectie AI-project", brief: "Warm familiehuis" })).body;
+  const source = await j("/api/ai/run", "POST", { flow: "proposal_writing", project_id: project.id, input: { text: "Maak een voorstel" } });
+  assert.equal(source.status, 201);
+
+  const section = await j(`/api/ai/jobs/${source.body.id}/regenerate-section`, "POST", { section: "style" });
+  assert.equal(section.status, 201);
+  assert.equal(section.body.flow, "proposal_writing");
+  assert.equal(section.body.review_status, "pending");
+  assert.equal(section.body.input.section, "style");
+  assert.match(section.body.output_text, /Lokaal concept|lokaal concept/);
+  assert.match(section.body.output_text, /Schrijf uitsluitend de sectie/);
+  assert.doesNotMatch(section.body.output_text, /Ontbrekende content checklist/);
+
+  const invalid = await j(`/api/ai/jobs/${source.body.id}/regenerate-section`, "POST", { section: "onbekend" });
+  assert.equal(invalid.status, 400);
+  assert.deepEqual(invalid.body.valid_sections, ["intro", "style", "rationale", "next-steps"]);
+});
