@@ -636,6 +636,9 @@ function migrate() {
   addColumn("notifications", "ref_type", "TEXT DEFAULT ''");
   addColumn("notifications", "ref_id", "TEXT DEFAULT ''");
 
+  // AI tone-of-voice preset selected when the job was run (NULL = default voice).
+  addColumn("ai_jobs", "tone", "TEXT");
+
   addColumn("projects", "studio_id", "TEXT REFERENCES studios(id) ON DELETE SET NULL");
   addColumn("projects", "owner_id", "TEXT REFERENCES users(id) ON DELETE SET NULL");
   addColumn("clients", "studio_id", "TEXT REFERENCES studios(id) ON DELETE SET NULL");

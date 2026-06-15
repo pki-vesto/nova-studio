@@ -15,6 +15,10 @@ const FLOWS = [
 ];
 const flowLabel = (value) => FLOWS.find((f) => f.value === value)?.label || value;
 
+// Fallback when the backend tone-preset list cannot be fetched — keeps the
+// selector usable in offline / first-render scenarios.
+const TONE_FALLBACK = [{ key: "standaard", label: "Standaard" }];
+
 // Review status → Dutch label + brand colour for the tag.
 const REVIEW = {
   approved: { label: "Goedgekeurd", color: "var(--sage)" },
@@ -122,6 +126,8 @@ export function AiPanel({ ctx }) {
   const [running, setRunning] = useState("");        // flow value currently running
   const [busyId, setBusyId] = useState(null);        // job id under review/delete/regenerate
   const [compareFlow, setCompareFlow] = useState(null);
+  const [tonePresets, setTonePresets] = useState(TONE_FALLBACK);
+  const [tone, setTone] = useState("standaard");
 
   async function loadJobs() {
     try {
@@ -133,6 +139,11 @@ export function AiPanel({ ctx }) {
   useEffect(() => {
     let alive = true;
     api.get("/api/ai/settings").then((s) => { if (alive) setSettings(s); }).catch(fail);
+    api.get("/api/ai/tone-presets").then((data) => {
+      if (!alive) return;
+      const list = Array.isArray(data?.presets) && data.presets.length > 0 ? data.presets : TONE_FALLBACK;
+      setTonePresets(list);
+    }).catch(() => { /* fall back to TONE_FALLBACK already set */ });
     loadJobs();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +152,7 @@ export function AiPanel({ ctx }) {
   async function run(flow) {
     setRunning(flow);
     try {
-      await api.json("/api/ai/run", "POST", { flow, project_id: project.id, input });
+      await api.json("/api/ai/run", "POST", { flow, project_id: project.id, input, tone });
       setInput("");
       await loadJobs();
     } catch (err) { fail(err); } finally { setRunning(""); }
@@ -150,7 +161,11 @@ export function AiPanel({ ctx }) {
   async function regenerate(job) {
     setBusyId(job.id);
     try {
-      const fresh = await api.json(`/api/ai/jobs/${job.id}/regenerate`, "POST", {});
+      // Preselect the source job's tone when present, so "Opnieuw" keeps the
+      // same register the designer originally chose. An explicit override can
+      // still be sent by passing `tone` here.
+      const body = job && job.tone ? { tone: job.tone } : {};
+      const fresh = await api.json(`/api/ai/jobs/${job.id}/regenerate`, "POST", body);
       // Prepend the new job optimistically, then resync from server.
       if (fresh && fresh.id) setJobs((prev) => [fresh, ...prev]);
       await loadJobs();
@@ -215,6 +230,16 @@ export function AiPanel({ ctx }) {
             </button>
           ))}
         </div>
+        <Field label="Toon">
+          <select
+            value={tone}
+            onChange={(e) => setTone(e.target.value)}
+            disabled={!!running}>
+            {tonePresets.map((p) => (
+              <option key={p.key} value={p.key}>{p.label}</option>
+            ))}
+          </select>
+        </Field>
         <Field label="Extra instructie of vraag">
           <textarea
             value={input}

@@ -46,7 +46,12 @@ const runSchema = z.object({
     "knowledge_retrieval"
   ]),
   project_id: z.string().optional(),
-  input: z.any().optional()
+  input: z.any().optional(),
+  tone: z.string().optional()
+});
+
+const regenerateSchema = z.object({
+  tone: z.string().optional()
 });
 
 // Supported AI flows. Each maps to a context-builder below.
@@ -59,6 +64,40 @@ const FLOWS = [
 ];
 
 const REVIEW_STATES = ["approved", "rejected", "pending"];
+
+// Static, code-defined tone-of-voice presets. The `standaard` entry is the
+// default voice and intentionally injects no instruction, so the default code
+// path keeps producing a byte-identical `system` prompt to before this change.
+const TONE_PRESETS = {
+  standaard: {
+    label: "Standaard",
+    instruction: ""
+  },
+  "premium-editorial": {
+    label: "Premium / editorial",
+    instruction:
+      "Schrijf in een premium, redactionele Nederlandse studio-stijl: verzorgd, beeldend en met aandacht voor sfeer, materiaal en compositie. Vermijd marketingtaal en clichés."
+  },
+  "warm-persoonlijk": {
+    label: "Warm / persoonlijk",
+    instruction:
+      "Schrijf warm en persoonlijk in het Nederlands, met directe aanspreekvorm en gevoel voor de bewoner. Houd het uitnodigend en herkenbaar zonder amicaal te worden."
+  },
+  "zakelijk-beknopt": {
+    label: "Zakelijk / beknopt",
+    instruction:
+      "Schrijf zakelijk en beknopt in het Nederlands: concrete formuleringen, korte zinnen en heldere structuur. Geen versieringen, geen overbodige bijvoeglijke naamwoorden."
+  }
+};
+
+function resolveTone(input) {
+  const key = typeof input === "string" ? input.trim() : "";
+  return Object.prototype.hasOwnProperty.call(TONE_PRESETS, key) ? key : "standaard";
+}
+
+function listTonePresets() {
+  return Object.entries(TONE_PRESETS).map(([key, value]) => ({ key, label: value.label }));
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -118,7 +157,11 @@ function fmtEuro(value) {
 }
 
 // Build a Dutch prompt + sources list for each flow. Returns { system, prompt, sources }.
-function buildContext(flow, bundle, input) {
+// `toneKey` selects a tone-of-voice preset (see TONE_PRESETS). The tone
+// instruction is appended to `system` only — never to `prompt` or `sources` —
+// so retrieval semantics are unchanged. The default preset (`standaard`)
+// appends nothing, keeping `system` byte-identical to the pre-change baseline.
+function buildContext(flow, bundle, input, toneKey = "standaard") {
   const sources = [];
   const lines = [];
   const userInput = (input && typeof input === "object" ? input.text || input.vraag || input.notes : input) || "";
@@ -213,11 +256,16 @@ function buildContext(flow, bundle, input) {
     lines.push("", `Vraag/opdracht van de gebruiker: ${userInput}`);
   }
 
-  const system = [
+  let system = [
     "Je bent de AI-assistent van Nova Studio, een tool voor interieuradvies.",
     "Antwoord altijd in helder, professioneel Nederlands.",
     `Huidige flow: ${flow}.`
   ].join(" ");
+
+  const preset = TONE_PRESETS[toneKey];
+  if (toneKey !== "standaard" && preset && preset.instruction) {
+    system += `\n\nToon: ${preset.instruction}`;
+  }
 
   return { system, prompt: lines.join("\n"), sources };
 }
@@ -249,10 +297,11 @@ function proposalReview(bundle, baseText) {
 }
 
 // Core: build context, call the provider, persist a job, return the hydrated row.
-async function runFlow({ flow, projectId, input }) {
+async function runFlow({ flow, projectId, input, tone }) {
   const bundle = loadProjectBundle(projectId);
   const settings = getSettings();
-  const { system, prompt, sources } = buildContext(flow, bundle, input);
+  const toneKey = resolveTone(tone);
+  const { system, prompt, sources } = buildContext(flow, bundle, input, toneKey);
 
   const result = await runCompletion({ flow, system, prompt, model: settings.model || DEFAULT_MODEL });
   let output = result.text;
@@ -262,11 +311,13 @@ async function runFlow({ flow, projectId, input }) {
   }
 
   const jobId = id("aijob");
+  // Store NULL for the default preset to keep row shape backward-compatible.
+  const persistedTone = toneKey === "standaard" ? null : toneKey;
   db.prepare(`
     INSERT INTO ai_jobs
-      (id, project_id, flow, status, review_status, input_json, output_text, sources_json, tokens_in, tokens_out, cost)
+      (id, project_id, flow, status, review_status, input_json, output_text, sources_json, tokens_in, tokens_out, cost, tone)
     VALUES
-      (@id, @project_id, @flow, 'draft', 'pending', @input_json, @output_text, @sources_json, @tokens_in, @tokens_out, @cost)
+      (@id, @project_id, @flow, 'draft', 'pending', @input_json, @output_text, @sources_json, @tokens_in, @tokens_out, @cost, @tone)
   `).run({
     id: jobId,
     project_id: projectId || null,
@@ -276,10 +327,11 @@ async function runFlow({ flow, projectId, input }) {
     sources_json: JSON.stringify(sources),
     tokens_in: result.tokens_in,
     tokens_out: result.tokens_out,
-    cost: result.cost
+    cost: result.cost,
+    tone: persistedTone
   });
 
-  record("ai_job", jobId, "run", { flow, provider: result.provider });
+  record("ai_job", jobId, "run", { flow, provider: result.provider, tone: toneKey });
   return getJob(jobId);
 }
 
@@ -408,8 +460,12 @@ router.put("/jobs/:id/review", validateBody(reviewSchema), (req, res) => {
 // Run / regenerate
 // ---------------------------------------------------------------------------
 
+router.get("/tone-presets", (_req, res) => {
+  res.json({ presets: listTonePresets() });
+});
+
 router.post("/run", validateBody(runSchema), wrap(async (req, res) => {
-  const { flow, project_id, input } = req.body || {};
+  const { flow, project_id, input, tone } = req.body || {};
   if (!FLOWS.includes(flow)) {
     return res.status(400).json({ error: `Onbekende flow. Kies uit: ${FLOWS.join(", ")}` });
   }
@@ -417,16 +473,23 @@ router.post("/run", validateBody(runSchema), wrap(async (req, res) => {
     const exists = db.prepare("SELECT id FROM projects WHERE id = ?").get(project_id);
     if (!exists) return res.status(404).json({ error: "Project niet gevonden" });
   }
-  const job = await runFlow({ flow, projectId: project_id || null, input });
+  const job = await runFlow({ flow, projectId: project_id || null, input, tone });
   res.status(201).json(job);
 }));
 
-router.post("/jobs/:id/regenerate", wrap(async (req, res) => {
+router.post("/jobs/:id/regenerate", validateBody(regenerateSchema, { partial: true }), wrap(async (req, res) => {
   const source = db.prepare("SELECT * FROM ai_jobs WHERE id = ?").get(req.params.id);
   if (!source) return res.status(404).json({ error: "AI-job niet gevonden" });
   const input = parseJson(source.input_json, {});
-  const job = await runFlow({ flow: source.flow, projectId: source.project_id, input });
+  // Reuse the source job's stored tone unless the caller supplies a new one.
+  const bodyTone = (req.body || {}).tone;
+  const tone = typeof bodyTone === "string" && bodyTone !== "" ? bodyTone : (source.tone || undefined);
+  const job = await runFlow({ flow: source.flow, projectId: source.project_id, input, tone });
   res.status(201).json(job);
 }));
 
 module.exports = router;
+module.exports.TONE_PRESETS = TONE_PRESETS;
+module.exports.resolveTone = resolveTone;
+module.exports.listTonePresets = listTonePresets;
+module.exports.buildContext = buildContext;
