@@ -3,6 +3,7 @@ const { db } = require("../db/database");
 const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
+const { record } = require("./audit");
 
 const router = express.Router();
 
@@ -79,6 +80,22 @@ function computeMargin(salePrice, purchasePrice) {
   const sale = Number(salePrice || 0);
   const purchase = Number(purchasePrice || 0);
   return (sale > 0 && purchase > 0) ? sale - purchase : 0;
+}
+
+// Append a row to product_price_history. Wrapped so a failure here can never
+// abort the surrounding product write (mirrors the audit.record pattern).
+function recordPriceHistory(productId, prices, note) {
+  try {
+    const purchase = Number(prices.purchase_price || 0);
+    const sale = Number(prices.sale_price || 0);
+    const price = Number(prices.price || 0);
+    db.prepare(`
+      INSERT INTO product_price_history (id, product_id, purchase_price, sale_price, price, margin, note)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id("price"), productId, purchase, sale, price, computeMargin(sale, purchase), note || "");
+  } catch {
+    // Never break the primary write.
+  }
 }
 
 // Quote a single CSV cell: wrap in quotes and double inner quotes when it
@@ -173,6 +190,11 @@ router.post("/", upload.single("image"), validateForm(productSchema), (req, res)
     availability_status: req.body.availability_status || "unknown",
     price_date: req.body.price_date || ""
   });
+  recordPriceHistory(productId, {
+    purchase_price: purchasePrice,
+    sale_price: salePrice,
+    price: Number(req.body.price || 0)
+  }, "initial");
   res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(productId));
 });
 
@@ -181,6 +203,11 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
   if (!current) return res.status(404).json({ error: "Product niet gevonden" });
   const salePrice = Number(req.body.sale_price ?? current.sale_price ?? 0);
   const purchasePrice = Number(req.body.purchase_price ?? current.purchase_price ?? 0);
+  const newPrice = Number(req.body.price ?? current.price ?? 0);
+  const priceChanged =
+    Number(current.purchase_price || 0) !== purchasePrice
+    || Number(current.sale_price || 0) !== salePrice
+    || Number(current.price || 0) !== newPrice;
   db.prepare(`
     UPDATE products SET
       name = @name,
@@ -241,6 +268,21 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
   if (req.file && current.image_path && current.image_path !== req.file.path) {
     removeUpload(current.image_path);
   }
+  if (priceChanged) {
+    recordPriceHistory(req.params.id, {
+      purchase_price: purchasePrice,
+      sale_price: salePrice,
+      price: newPrice
+    });
+    record("product", req.params.id, "price_change", JSON.stringify({
+      from: {
+        purchase_price: Number(current.purchase_price || 0),
+        sale_price: Number(current.sale_price || 0),
+        price: Number(current.price || 0)
+      },
+      to: { purchase_price: purchasePrice, sale_price: salePrice, price: newPrice }
+    }));
+  }
   res.json(db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id));
 });
 
@@ -251,6 +293,19 @@ router.delete("/:id", (req, res) => {
   db.prepare("DELETE FROM products WHERE id = ?").run(req.params.id);
   if (current) removeUpload(current.image_path);
   res.status(204).end();
+});
+
+// --- Price history -----------------------------------------------------------
+router.get("/:id/price-history", (req, res) => {
+  const product = db.prepare("SELECT id FROM products WHERE id = ?").get(req.params.id);
+  if (!product) return res.status(404).json({ error: "Product niet gevonden" });
+  // `changed_at` is second-precision so we fall back to rowid for stable
+  // ordering between writes that share a second.
+  res.json(db.prepare(`
+    SELECT * FROM product_price_history
+    WHERE product_id = ?
+    ORDER BY changed_at DESC, rowid DESC
+  `).all(req.params.id));
 });
 
 // --- Variants ----------------------------------------------------------------

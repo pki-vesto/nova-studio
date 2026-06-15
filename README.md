@@ -68,6 +68,7 @@ Open daarna:
 ```bash
 npm test        # util-tests + API-integratietests (client/project/product/proposal/PDF/statusflow)
 npm run build   # release-build-check (Vite production build)
+npm run check:pdf-renderer  # controleert Poppler/pdftoppm voor PDF-floorplan thumbnails
 ```
 
 `npm test` draait alle `*.test.js` onder `server/src/` in-process tegen een geïsoleerde tijdelijke database — het raakt de live `./data` nooit. Draai `npm run build` als build-check voordat je een release uitrolt.
@@ -81,6 +82,12 @@ Nova Studio werkt standaard als single-user lokale tool zonder login. Zodra je v
 Het AI-platform is standaard **uitgeschakeld**. Zet AI aan via de AI-instellingen en lever een Anthropic-sleutel aan via de omgevingsvariabele `ANTHROPIC_API_KEY` om de flows live door **Claude** te laten schrijven. Zonder sleutel (of bij een mislukte call) levert de adapter een **eerlijk, lokaal concept** dat duidelijk als zodanig gelabeld is — er wordt nooit stil een modelcall gefaket.
 
 ## Productie/self-hosted
+
+PDF-plattegrondthumbnails gebruiken Poppler via het runtime-binary `pdftoppm`. De Docker-image installeert `poppler-utils`; bij een niet-Docker deployment moet `pdftoppm` op `PATH` staan. Controleer dit vóór productie met:
+
+```bash
+npm run check:pdf-renderer
+```
 
 ```bash
 docker compose up --build
