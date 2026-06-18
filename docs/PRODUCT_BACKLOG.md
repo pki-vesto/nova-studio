@@ -95,8 +95,8 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 70. [Completed] API-test voor productselectie.
 71. [Completed] API-test voor proposal export.
 72. [Partial] API-test voor upload URL veiligheid. (uploadUrl-util getest, geen dedicated route-securitytest)
-73. [Not Started] Frontend smoke-test voor project-to-proposal flow.
-74. [Not Started] Frontend smoke-test voor presentatie openen.
+73. [Completed] Frontend smoke-test voor project-to-proposal flow. (`web/src/__smoke__/project-proposal-presentation.smoke.test.js`)
+74. [Completed] Frontend smoke-test voor presentatie openen. (`web/src/__smoke__/project-proposal-presentation.smoke.test.js`)
 75. [Completed] Build-check toevoegen aan releaseproces. (`npm run build`)
 76. [Completed] Documentatie-update checklist toevoegen aan README.
 77. [Completed] Schema changelog toevoegen. (`docs/SCHEMA_CHANGELOG.md`)
