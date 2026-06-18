@@ -66,6 +66,30 @@ export function SectionHead({ kicker, title, sub, right }) {
   );
 }
 
+export function EmptyState({ title, body, action, compact = false }) {
+  return (
+    <div className={`empty ${compact ? "empty-compact" : ""}`}>
+      {title && <h2 className="serif" style={{ fontSize: compact ? 20 : 26, margin: 0 }}>{title}</h2>}
+      {body && <p className="body" style={{ margin: 0, maxWidth: 560 }}>{body}</p>}
+      {action}
+    </div>
+  );
+}
+
+export function InlineError({ title = "Niet geladen", body, action }) {
+  return (
+    <div className="banner-error" role="alert">
+      <div className="row between middle gap3">
+        <div style={{ minWidth: 0 }}>
+          <strong>{title}</strong>
+          {body && <div style={{ marginTop: 4 }}>{body}</div>}
+        </div>
+        {action && <div style={{ flex: "none" }}>{action}</div>}
+      </div>
+    </div>
+  );
+}
+
 export function Figure({ label, src, caption, ratio = "4/3", dark, icon, style }) {
   return (
     <figure style={{ margin: 0, ...style }}>
