@@ -173,7 +173,7 @@ API's: CRUD + image upload onder `/api/design-library`. Writes gevalideerd.
 
 ### Proposals
 
-Verantwoordelijkheden: voorstel CRUD met **configureerbare secties** (`proposal_sections`: kind, titel, body, audience client/internal, aan/uit, volgorde + reorder; standaardsecties worden geseed), **versies** (`/new-version`), **statusflow** (concept → verzonden → geaccepteerd, zet `accepted_at`), **comments per sectie** (`proposal_comments`), **PDF-theming** per audience met appendices, **exportgeschiedenis** en een **klantveilige Projectoverdracht-PDF** (`/handover-pdf`) als gebundeld close-out artefact (ruimtes, materialen, geselecteerde producten zonder inkoopprijs/marge, en index van `project_documents`).
+Verantwoordelijkheden: voorstel CRUD met **configureerbare secties** (`proposal_sections`: kind, titel, body, audience client/internal, aan/uit, volgorde + reorder; standaardsecties worden geseed), invoegen van Design Library `proposal_snippet` items als secties, **versies** (`/new-version`), **statusflow** (concept → verzonden → geaccepteerd, zet `accepted_at`), **comments per sectie** (`proposal_comments`), **PDF-theming** per audience met appendices, **exportgeschiedenis** en een **klantveilige Projectoverdracht-PDF** (`/handover-pdf`) als gebundeld close-out artefact (ruimtes, materialen, geselecteerde producten zonder inkoopprijs/marge, en index van `project_documents`).
 
 Datamodellen: `proposals` (incl. `version`, `status`, `summary`, `accepted_at`), `proposal_sections`, `proposal_comments`.
 

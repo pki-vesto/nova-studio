@@ -188,7 +188,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 160. [Partial] Design Library room templates toevoegen. (kind ondersteund; geen dedicated room-template-flow)
 161. [Partial] Design Library productsets toevoegen. (via data_json/kind)
 162. [Partial] Design Library materiaalsets toevoegen. (via data_json/kind)
-163. [Partial] Design Library proposal snippets toevoegen. (via kind; geen directe invoeg-in-voorstel)
+163. [Completed] Design Library proposal snippets toevoegen. (direct invoegen als proposal-sectie)
 164. [Not Started] Intake vragenlijst configureren.
 165. [Completed] Intake scope-inschatting toevoegen.
 166. [Completed] Intake risico's handmatig markeren.
