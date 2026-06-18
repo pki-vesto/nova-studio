@@ -398,6 +398,17 @@ function migrate() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Managed product category vocabulary. Products still store the display
+    -- category string for backwards compatibility; this table gives the UI a
+    -- durable vocabulary to manage.
+    CREATE TABLE IF NOT EXISTS product_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Moodboard client feedback.
     CREATE TABLE IF NOT EXISTS moodboard_feedback (
       id TEXT PRIMARY KEY,

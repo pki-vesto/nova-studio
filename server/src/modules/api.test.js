@@ -72,6 +72,39 @@ test("productselectie en shoppinglijst totaal", async () => {
   assert.equal(shopping.total, 2000, "2 × €1000");
 });
 
+test("productcategorieen beheren en toepassen op producten", async () => {
+  const product = await (await j("/api/products", "POST", { name: "Categorie-bank", category: "Meubilair", price: 1000 })).json();
+
+  const initial = await (await j("/api/products/categories")).json();
+  const furniture = initial.find((c) => c.name === "Meubilair");
+  assert.ok(furniture, "product write seeds the managed category vocabulary");
+  assert.equal(furniture.product_count, 1);
+
+  const createdRes = await j("/api/products/categories", "POST", { name: "Verlichting" });
+  assert.equal(createdRes.status, 201);
+  const created = await createdRes.json();
+  assert.equal(created.name, "Verlichting");
+
+  const renamedRes = await j(`/api/products/categories/${furniture.id}`, "PUT", { name: "Zitmeubilair" });
+  assert.equal(renamedRes.status, 200);
+  assert.equal((await renamedRes.json()).name, "Zitmeubilair");
+  const renamedProduct = db.prepare("SELECT category FROM products WHERE id = ?").get(product.id);
+  assert.equal(renamedProduct.category, "Zitmeubilair", "renaming category updates linked products");
+
+  const duplicate = await j(`/api/products/categories/${created.id}`, "PUT", { name: "zitmeubilair" });
+  assert.equal(duplicate.status, 409);
+
+  const deleteLinkedRes = await j(`/api/products/categories/${furniture.id}`, "DELETE");
+  assert.equal(deleteLinkedRes.status, 204);
+  const clearedProduct = db.prepare("SELECT category FROM products WHERE id = ?").get(product.id);
+  assert.equal(clearedProduct.category, "", "deleting category clears linked product category");
+
+  const deleteRes = await j(`/api/products/categories/${created.id}`, "DELETE");
+  assert.equal(deleteRes.status, 204);
+  const afterDelete = await (await j("/api/products/categories")).json();
+  assert.equal(afterDelete.some((c) => c.id === created.id), false);
+});
+
 test("room finish schedule bundelt kleuren materialen en notities", async () => {
   const project = await (await j("/api/projects", "POST", { title: "Afwerkproject" })).json();
   const room = await (await j("/api/rooms", "POST", {
