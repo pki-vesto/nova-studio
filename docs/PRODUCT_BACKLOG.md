@@ -256,18 +256,18 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 225. [Completed] Contractdocumenten opslaan. (project_documents)
 226. [Partial] Factuurvoorbereiding modelleren. (budget marge/btw-overzicht; geen factuurentiteit)
 227. [Not Started] Offerte-aanvraag naar leverancier voorbereiden.
-228. [Not Started] Supplier price list import.
+228. [Completed] Supplier price list import. (`/import-price-list` maakt kandidaten en update SKU-matches)
 229. [Not Started] Supplier catalog sync adapter.
 230. [Not Started] Supplier email templates.
 231. [Partial] Product availability snapshots. (availability_status-veld; geen snapshot-historie)
-232. [Partial] Product price history. (price_date-veld; geen historie-tabel)
+232. [Completed] Product price history. (`product_price_history` met capture bij prijswijzigingen)
 233. [Not Started] Product duplicate detection.
 234. [Not Started] Product enrichment queue.
-235. [Partial] Material sample ordering workflow. (sample_status-veld; geen bestelflow)
+235. [Completed] Material sample ordering workflow. (request/receive/reset-flow met audit)
 236. [Completed] Material sample status dashboard. (cross-project sample-overview endpoint + tab in Materiaalbibliotheek met deep links naar projectmateriaaltab)
 237. [Completed] Color palette comparison tool. (Color Library + per-room toepassingen)
 238. [Partial] Room specification sheet. (roomvelden + appendices; geen aparte spec-sheet-export)
-239. [Not Started] Room finish schedule.
+239. [Completed] Room finish schedule. (API + PDF-export per ruimte)
 240. [Partial] Installation notes per room. (designer_notes; geen aparte installatie-sectie)
 241. [Completed] Project handover package. (gebundelde handover-PDF met ruimtes, materialen, geselecteerde producten en projectdocumenten-index)
 242. [Completed] Knowledge nodes tabel.
@@ -296,7 +296,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 265. [Completed] AI cost tracking. (token-/kostenschatting per job)
 266. [Partial] AI output diff review. (review-status approve/reject; geen diff-weergave)
 267. [Partial] AI regenerate per sectie. (`/jobs/:id/regenerate` per job; geen sectie-granulariteit)
-268. [Not Started] AI tone-of-voice presets.
+268. [Completed] AI tone-of-voice presets. (presetlijst, job-persist en regenerate-behoud)
 269. [Completed] AI missing-content checklist. (in proposal_writing)
 270. [Completed] AI proposal quality score. (in proposal_writing)
 271. [Completed] Floorplan geometry normaliseren. (geometry_json per object)
