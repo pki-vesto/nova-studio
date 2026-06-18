@@ -298,10 +298,10 @@ function ObjectsPanel({ ctx, plan }) {
   const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState([]);
-  const [form, setForm] = useState({ layer: "walls", kind: "wall", label: "", product_id: "", material_id: "" });
+  const [form, setForm] = useState({ layer: "walls", kind: "wall", label: "", room_id: "", product_id: "", material_id: "" });
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [editForm, setEditForm] = useState({ label: "", product_id: "", material_id: "" });
+  const [editForm, setEditForm] = useState({ label: "", room_id: "", product_id: "", material_id: "" });
 
   // Unique products selected for this project, keyed by product_id so the same
   // product placed in multiple rooms only shows once in the picker.
@@ -314,6 +314,7 @@ function ObjectsPanel({ ctx, plan }) {
     }
     return Array.from(seen.values());
   })();
+  const roomName = (roomId) => (project?.rooms || []).find((room) => room.id === roomId)?.name || "";
 
   async function load() {
     setLoading(true);
@@ -327,28 +328,34 @@ function ObjectsPanel({ ctx, plan }) {
   }, [project?.id]);
 
   function pickLayer(layer) {
-    setForm((p) => ({ ...p, layer, kind: KIND_BY_LAYER[layer][0] }));
+    setForm((p) => ({ ...p, layer, kind: KIND_BY_LAYER[layer][0], room_id: layer === "annotations" ? p.room_id : "" }));
   }
   async function add() {
     setBusy(true);
     try {
+      const geometry = form.layer === "annotations" && form.room_id ? { room_id: form.room_id } : {};
       await api.json(`/api/floorplans/${plan.id}/objects`, "POST", {
         layer: form.layer,
         kind: form.kind,
         label: form.label.trim() || null,
-        geometry: {},
+        geometry,
         sort_order: objects.filter((o) => o.layer === form.layer).length,
         product_id: form.product_id || null,
         material_id: form.material_id || null
       });
-      setForm((p) => ({ ...p, label: "", product_id: "", material_id: "" }));
+      setForm((p) => ({ ...p, label: "", room_id: "", product_id: "", material_id: "" }));
       await load();
     } catch (err) { fail(err); } finally { setBusy(false); }
   }
   async function saveEdit(oid) {
     try {
+      const current = objects.find((o) => o.id === oid);
+      const currentGeometry = current?.geometry && typeof current.geometry === "object" ? current.geometry : {};
       await api.json(`/api/floorplans/objects/${oid}`, "PUT", {
         label: editForm.label.trim() || null,
+        geometry: current?.layer === "annotations"
+          ? { ...currentGeometry, room_id: editForm.room_id || null }
+          : currentGeometry,
         product_id: editForm.product_id || null,
         material_id: editForm.material_id || null
       });
@@ -379,6 +386,14 @@ function ObjectsPanel({ ctx, plan }) {
         </Field>
       </div>
       <Field label="Label (optioneel)"><input value={form.label} onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))} placeholder="Bijv. Bank 3-zits" /></Field>
+      {form.layer === "annotations" && (
+        <Field label="Ruimte voor annotatie">
+          <select value={form.room_id} onChange={(e) => setForm((p) => ({ ...p, room_id: e.target.value }))}>
+            <option value="">— geen ruimte —</option>
+            {(project?.rooms || []).map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
+          </select>
+        </Field>
+      )}
       <div className="form-grid form-grid-2" style={{ marginTop: 10 }}>
         <Field label="Gekoppeld product">
           <select value={form.product_id} onChange={(e) => setForm((p) => ({ ...p, product_id: e.target.value }))}>
@@ -409,6 +424,14 @@ function ObjectsPanel({ ctx, plan }) {
                 {editing === o.id ? (
                   <div className="col gap2">
                     <input value={editForm.label} onChange={(e) => setEditForm((p) => ({ ...p, label: e.target.value }))} placeholder="Label" autoFocus />
+                    {o.layer === "annotations" && (
+                      <Field label="Ruimte voor annotatie">
+                        <select value={editForm.room_id} onChange={(e) => setEditForm((p) => ({ ...p, room_id: e.target.value }))}>
+                          <option value="">— geen ruimte —</option>
+                          {(project?.rooms || []).map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
+                        </select>
+                      </Field>
+                    )}
                     <div className="form-grid form-grid-2">
                       <Field label="Product">
                         <select value={editForm.product_id} onChange={(e) => setEditForm((p) => ({ ...p, product_id: e.target.value }))}>
@@ -440,11 +463,11 @@ function ObjectsPanel({ ctx, plan }) {
                     <div>
                       <strong style={{ fontSize: 14 }}>{o.product_name || o.material_name || o.label || o.kind}</strong>
                       <span className="caption" style={{ marginLeft: 8 }}>
-                        {[o.kind, o.product_name && "product", o.material_name && "materiaal"].filter(Boolean).join(" · ")}
+                        {[o.kind, o.geometry?.room_id && roomName(o.geometry.room_id), o.product_name && "product", o.material_name && "materiaal"].filter(Boolean).join(" · ")}
                       </span>
                     </div>
                     <div className="row gap2">
-                      <button type="button" className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => { setEditing(o.id); setEditForm({ label: o.label || "", product_id: o.product_id || "", material_id: o.material_id || "" }); }}><Icon name="edit" size={13} /></button>
+                      <button type="button" className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => { setEditing(o.id); setEditForm({ label: o.label || "", room_id: o.geometry?.room_id || "", product_id: o.product_id || "", material_id: o.material_id || "" }); }}><Icon name="edit" size={13} /></button>
                       <button type="button" className="btn btn-danger" style={{ padding: "6px 9px" }} onClick={() => remove(o.id)}><Icon name="trash" size={13} /></button>
                     </div>
                   </div>
