@@ -326,6 +326,33 @@ test("product price history capture en surface", async () => {
   assert.equal(missing.status, 404);
 });
 
+test("product variant creation records initial price history", async () => {
+  const parent = await (await j("/api/products", "POST", {
+    name: "Variant Parent", purchase_price: 100, sale_price: 175, price: 175
+  })).json();
+
+  const variantRes = await j(`/api/products/${parent.id}/variants`, "POST", {
+    name: "Variant Parent - velvet",
+    purchase_price: 120,
+    sale_price: 210,
+    price: 210
+  });
+  assert.equal(variantRes.status, 201);
+  const variant = await variantRes.json();
+  assert.equal(variant.parent_product_id, parent.id);
+  assert.equal(variant.purchase_price, 120);
+  assert.equal(variant.sale_price, 210);
+  assert.equal(variant.margin, 90);
+
+  const history = await (await j(`/api/products/${variant.id}/price-history`)).json();
+  assert.equal(history.length, 1, "variant create appends an initial history row");
+  assert.equal(history[0].purchase_price, 120);
+  assert.equal(history[0].sale_price, 210);
+  assert.equal(history[0].price, 210);
+  assert.equal(history[0].margin, 90);
+  assert.equal(history[0].note, "variant_initial");
+});
+
 // Hex-encode an ASCII string the way PDFKit writes glyphs inside `<...>` TJ
 // hex strings (lowercase). Used to assert text fragments survive into the
 // uncompressed PDF stream, even though kerning gaps split longer runs.

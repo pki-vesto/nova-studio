@@ -321,6 +321,7 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
   const variantId = id("product");
   const salePrice = Number(req.body.sale_price || 0);
   const purchasePrice = Number(req.body.purchase_price || 0);
+  const catalogPrice = Number(req.body.price || 0);
   db.prepare(`
     INSERT INTO products (id, name, brand, supplier, category, collection, sku, dimensions, lead_time, designer, alternative_to_id, image_path, price, webshop_url, description, notes, tags, status, supplier_id, parent_product_id, purchase_price, sale_price, margin, vat_rate, availability_status, price_date)
     VALUES (@id, @name, @brand, @supplier, @category, @collection, @sku, @dimensions, @lead_time, @designer, @alternative_to_id, @image_path, @price, @webshop_url, @description, @notes, @tags, @status, @supplier_id, @parent_product_id, @purchase_price, @sale_price, @margin, @vat_rate, @availability_status, @price_date)
@@ -337,7 +338,7 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
     designer: req.body.designer || "",
     alternative_to_id: req.body.alternative_to_id || null,
     image_path: req.file?.path || "",
-    price: Number(req.body.price || 0),
+    price: catalogPrice,
     webshop_url: req.body.webshop_url || "",
     description: req.body.description || "",
     notes: req.body.notes || "",
@@ -352,6 +353,11 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
     availability_status: req.body.availability_status || "unknown",
     price_date: req.body.price_date || ""
   });
+  recordPriceHistory(variantId, {
+    purchase_price: purchasePrice,
+    sale_price: salePrice,
+    price: catalogPrice
+  }, "variant_initial");
   res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(variantId));
 });
 

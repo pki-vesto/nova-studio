@@ -66,6 +66,7 @@ function ProductDrawer({ ctx, product, onClose }) {
   const [form, setForm] = useState({
     name: product?.name || "", brand: product?.brand || "", designer: product?.designer || "",
     supplier: product?.supplier || "", category: product?.category || "", price: product?.price || "",
+    purchase_price: product?.purchase_price || "", sale_price: product?.sale_price || "",
     webshop_url: product?.webshop_url || "", description: product?.description || ""
   });
   const [file, setFile] = useState(null);
@@ -98,6 +99,8 @@ function ProductDrawer({ ctx, product, onClose }) {
         </div>
         <div className="form-grid form-grid-2">
           <Field label="Richtprijs (€)"><input type="number" step="0.01" value={form.price} onChange={set("price")} placeholder="4890" /></Field>
+          <Field label="Inkoopprijs (€)"><input type="number" step="0.01" value={form.purchase_price} onChange={set("purchase_price")} placeholder="3200" /></Field>
+          <Field label="Verkoopprijs (€)"><input type="number" step="0.01" value={form.sale_price} onChange={set("sale_price")} placeholder="4890" /></Field>
           <Field label="Webshoplink"><input value={form.webshop_url} onChange={set("webshop_url")} placeholder="https://" /></Field>
         </div>
         <Field label="Omschrijving / motivatie"><textarea value={form.description} onChange={set("description")} rows={3} /></Field>
