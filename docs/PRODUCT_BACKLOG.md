@@ -102,8 +102,8 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 77. [Completed] Schema changelog toevoegen. (`docs/SCHEMA_CHANGELOG.md`)
 78. [Completed] Database backup runbook toevoegen. (`docs/BACKUP_RUNBOOK.md` + ingebouwd mechanisme: `backup.js`, `npm run backup`, `/api/backup`, UI)
 79. [Completed] Upload cleanup audit toevoegen. (media-orphans + cleanup)
-80. [Partial] Error states per domeinscherm verbeteren. (gedeelde InlineError + leveranciers load/retry-state; verdere domeinen volgen)
-81. [Partial] Empty states per domeinscherm concreter maken. (gedeelde EmptyState + klant/leverancier-states; verdere domeinen volgen)
+80. [Partial] Error states per domeinscherm verbeteren. (gedeelde InlineError + retry-states voor leveranciers, design library, materiaalbibliotheek en kennisgraaf; verdere domeinen volgen)
+81. [Partial] Empty states per domeinscherm concreter maken. (gedeelde EmptyState + concretere states voor klanten, leveranciers, design library, materiaalbibliotheek en kennisgraaf; verdere domeinen volgen)
 82. [Completed] Projectduplicatie uitbreiden met materials.
 83. [Completed] Projectduplicatie uitbreiden met moodboards.
 84. [Completed] Projectduplicatie uitbreiden met productselecties.
