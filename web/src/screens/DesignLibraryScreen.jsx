@@ -63,6 +63,8 @@ export function DesignLibraryScreen({ ctx }) {
   const [items, setItems] = useState([]);
   const [kind, setKind] = useState("Alle");
   const [drawer, setDrawer] = useState(null); // null | {} | item
+  const [roomId, setRoomId] = useState("");
+  const [promoting, setPromoting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -80,6 +82,39 @@ export function DesignLibraryScreen({ ctx }) {
     try { await api.del(`/api/design-library/${id}`); await load(); }
     catch (err) { ctx.fail(err); }
   }
+  async function saveRoomTemplate() {
+    const room = (ctx.project?.rooms || []).find((r) => r.id === roomId);
+    if (!room) return;
+    setPromoting(true);
+    try {
+      await api.json("/api/design-library/promote", "POST", {
+        kind: "room_template",
+        title: room.name,
+        summary: [room.room_type, room.floor_level, room.dimensions].filter(Boolean).join(" · "),
+        body: room.concept || room.designer_notes || "",
+        tags: [room.room_type, room.floor_level].filter(Boolean).join(", "),
+        source_project_id: ctx.project.id,
+        data: {
+          room: {
+            name: room.name,
+            room_type: room.room_type || "",
+            floor_level: room.floor_level || "",
+            dimensions: room.dimensions || "",
+            orientation: room.orientation || "",
+            daylight: room.daylight || "",
+            color_notes: room.color_notes || "",
+            designer_notes: room.designer_notes || "",
+            concept: room.concept || ""
+          }
+        }
+      });
+      setRoomId("");
+      await load();
+    } catch (err) { ctx.fail(err); }
+    finally { setPromoting(false); }
+  }
+
+  const rooms = ctx.project?.rooms || [];
 
   return (
     <div className="content content-wide rise">
@@ -87,6 +122,26 @@ export function DesignLibraryScreen({ ctx }) {
         <div><Kicker style={{ marginBottom: 14 }}>Herbruikbare kennis</Kicker><h1 className="page-title">Design Library</h1></div>
         <button className="btn btn-primary btn-lg" onClick={() => setDrawer({})}><Icon name="plus" size={16} /> Item toevoegen</button>
       </div>
+
+      {ctx.project && rooms.length > 0 && (
+        <div className="card" style={{ padding: "18px 20px", marginBottom: 28 }}>
+          <div className="row between middle wrap" style={{ gap: 14 }}>
+            <div>
+              <Kicker style={{ marginBottom: 6 }}>Uit huidig project</Kicker>
+              <div className="body" style={{ fontSize: 14, margin: 0 }}>Bewaar een ruimte als herbruikbare ruimte-template.</div>
+            </div>
+            <div className="row gap2 wrap">
+              <select value={roomId} onChange={(e) => setRoomId(e.target.value)} style={{ width: 240 }}>
+                <option value="">Kies ruimte...</option>
+                {rooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
+              </select>
+              <button className="btn btn-clay" onClick={saveRoomTemplate} disabled={!roomId || promoting}>
+                <Icon name="download" size={14} /> {promoting ? "Opslaan..." : "Template opslaan"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="empty"><p className="body" style={{ margin: 0 }}>Nog geen items. Leg concepten, ruimte-templates, product- en materiaalsets en voorstel-snippets vast — herbruikbaar in elk project.</p>
