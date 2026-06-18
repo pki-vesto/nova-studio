@@ -218,7 +218,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 190. [Completed] Back-up hersteltest documenteren. (`docs/BACKUP_RUNBOOK.md`)
 191. [Not Started] Accessibility audit uitvoeren.
 192. [Partial] Mobile responsive polish.
-193. [Not Started] Desktop screenshot regressietest.
+193. [Partial] Desktop screenshot regressietest. (headless Firefox smoke-harness met host capability probe; echte capture draait waar Firefox screenshots ondersteunt)
 194. [Partial] Print CSS uitbreiden.
 195. [Not Started] PDF visual regression smoke-test.
 196. [Completed] Form validatie uniformeren met zod. (gecentraliseerd in `validate.js`, `validateBody`/`validateForm` op vrijwel alle write-endpoints; projects/auth via eigen inline zod met hetzelfde foutcontract)
