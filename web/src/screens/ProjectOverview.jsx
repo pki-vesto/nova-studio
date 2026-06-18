@@ -74,8 +74,9 @@ function MetaDrawer({ ctx, onClose }) {
 }
 
 export function ProjectOverview({ ctx }) {
-  const { project: p, go } = ctx;
+  const { project: p, go, fail } = ctx;
   const [editing, setEditing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const specs = [
     ["Klant", p.client_name],
     ["Locatie", p.location || p.address],
@@ -83,6 +84,25 @@ export function ProjectOverview({ ctx }) {
     ["Type", p.project_type],
     ["Oplevering", p.delivery]
   ].filter(([, v]) => v);
+
+  async function exportBundle() {
+    setExporting(true);
+    try {
+      const result = await api.blob(`/api/projects/${p.id}/export.json`);
+      const url = URL.createObjectURL(result.blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = result.filename || `${(p.title || "project").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project"}-projectbundel.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      fail(err);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="content content-wide rise">
@@ -101,6 +121,9 @@ export function ProjectOverview({ ctx }) {
           <div className="row gap3 middle wrap" style={{ marginTop: 32 }}>
             <button className="btn btn-primary btn-lg" onClick={() => go("present")}><Icon name="present" size={16} /> Presenteer voorstel</button>
             <button className="btn btn-ghost btn-lg" onClick={() => go("proposal")}><Icon name="proposal" size={16} /> Open voorstel</button>
+            <button className="btn btn-ghost btn-lg" onClick={exportBundle} disabled={exporting}>
+              <Icon name="download" size={16} /> {exporting ? "Exporteren..." : "Exporteer bundel"}
+            </button>
           </div>
         </div>
         <Ph label="woonkamer — hero, full bleed" src={p.hero_image_path} icon="mood" style={{ aspectRatio: "4/5", borderRadius: "var(--r-md)" }} />

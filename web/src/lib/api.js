@@ -35,6 +35,14 @@ export const api = {
     if (res.status === 204) return null;
     return res.json();
   },
+  async blob(path) {
+    const res = await fetch(path, { headers: authHeaders() });
+    if (!res.ok) return fail(res, path);
+    return {
+      blob: await res.blob(),
+      filename: (res.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/)?.[1] || ""
+    };
+  },
   async del(path) {
     const res = await fetch(path, { method: "DELETE", headers: authHeaders() });
     if (!res.ok) return fail(res, path);

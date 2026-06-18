@@ -72,6 +72,51 @@ test("productselectie en shoppinglijst totaal", async () => {
   assert.equal(shopping.total, 2000, "2 × €1000");
 });
 
+test("project bundle export en import herstelt projectdata", async () => {
+  const project = await (await j("/api/projects", "POST", { title: "Bundleproject", clientName: "Bundle Klant" })).json();
+  const room = await (await j("/api/rooms", "POST", { project_id: project.id, name: "Woonkamer", floor_level: "Begane grond", concept: "Rustige basis" })).json();
+  const product = await (await j("/api/products", "POST", { name: "Fauteuil", brand: "Nova", price: 450 })).json();
+  await j("/api/products/select", "POST", { project_id: project.id, room_id: room.id, product_id: product.id, quantity: 1, designer_note: "Leeshoek" });
+  await j("/api/materials", "POST", { project_id: project.id, name: "Eiken vloer", spec: "Gerookt", application: "Vloer" });
+  db.prepare(`
+    INSERT INTO proposals (id, project_id, title, intro_text, version, status)
+    VALUES ('proposal_bundle', ?, 'Voorstel bundle', 'Intro', 2, 'sent')
+  `).run(project.id);
+  db.prepare(`
+    INSERT INTO proposal_sections (id, proposal_id, kind, title, body, audience, sort_order)
+    VALUES ('psection_bundle', 'proposal_bundle', 'text', 'Snippet', 'Tekst', 'client', 0)
+  `).run();
+
+  const exportRes = await j(`/api/projects/${project.id}/export.json`);
+  if (exportRes.status !== 200) assert.fail(await exportRes.text());
+  const bundle = await exportRes.json();
+  assert.equal(bundle.bundle_type, "nova.project");
+  assert.equal(bundle.rooms.length, 1);
+  assert.equal(bundle.materials.length, 1);
+  assert.equal(bundle.selections.length, 1);
+  assert.equal(bundle.selections[0].product.name, "Fauteuil");
+  assert.equal(bundle.proposals[0].sections.length, 1);
+
+  db.prepare("DELETE FROM products WHERE id = ?").run(product.id);
+  const importRes = await j("/api/projects/import", "POST", bundle);
+  assert.equal(importRes.status, 201);
+  const imported = await importRes.json();
+  assert.match(imported.id, /^project_/);
+  assert.notEqual(imported.id, project.id);
+  assert.equal(imported.title, "Bundleproject import");
+  assert.equal(imported.rooms.length, 1);
+  assert.equal(imported.rooms[0].name, "Woonkamer");
+  assert.equal(imported.materials.length, 1);
+  assert.equal(imported.products.length, 1);
+  assert.equal(imported.products[0].name, "Fauteuil");
+  const importedSections = db.prepare(`
+    SELECT s.title FROM proposal_sections s
+    JOIN proposals p ON p.id = s.proposal_id
+    WHERE p.project_id = ?
+  `).all(imported.id);
+  assert.deepEqual(importedSections.map((s) => s.title), ["Snippet"]);
+});
+
 test("room finish schedule bundelt kleuren materialen en notities", async () => {
   const project = await (await j("/api/projects", "POST", { title: "Afwerkproject" })).json();
   const room = await (await j("/api/rooms", "POST", {

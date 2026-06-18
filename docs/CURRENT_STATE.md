@@ -28,11 +28,11 @@ Getest: API-test "client aanmaken".
 
 Live staat: lokale DB bevat 1 client.
 
-### Projects (soft-delete, optimistic concurrency, volledige duplicatie)
+### Projects (soft-delete, optimistic concurrency, duplicatie, projectbundels)
 
-Werkt: projectlijst met statusfilter en templatefilter, aanmaken met bestaande/nieuwe klant, detail, metadata bewerken, hero-upload, archiveren/herstellen. Zodra gebruikers bestaan worden projecten gestampt met `studio_id`/`owner_id`; lijsten/detailroutes filteren op ownershipscope en project-scoped childroutes worden via centrale authorization gecontroleerd. **Soft-delete** (`deleted_at`, met `/undelete`) — lijst filtert verwijderde projecten weg. **Optimistic concurrency** via `row_version` (409 bij conflict, backward-compatible als er geen versie wordt meegestuurd). **Volledige duplicatie**: kopieert nu project, intake, rooms (met id-remap), materials, moodboards + assets en productselecties. Sample-project endpoint (`/seed-sample`).
+Werkt: projectlijst met statusfilter en templatefilter, aanmaken met bestaande/nieuwe klant, detail, metadata bewerken, hero-upload, archiveren/herstellen. Zodra gebruikers bestaan worden projecten gestampt met `studio_id`/`owner_id`; lijsten/detailroutes filteren op ownershipscope en project-scoped childroutes worden via centrale authorization gecontroleerd. **Soft-delete** (`deleted_at`, met `/undelete`) — lijst filtert verwijderde projecten weg. **Optimistic concurrency** via `row_version` (409 bij conflict, backward-compatible als er geen versie wordt meegestuurd). **Volledige duplicatie**: kopieert nu project, intake, rooms (met id-remap), materials, moodboards + assets en productselecties. **Projectbundel import/export**: projectoverzicht exporteert een JSON-bundel; projectlijst importeert die bundel als nieuw project met nieuwe ID's en herstelde child-relaties. Sample-project endpoint (`/seed-sample`).
 
-Getest: API-test "project aanmaken met nieuwe klant en in lijst zichtbaar".
+Getest: API-tests "project aanmaken met nieuwe klant en in lijst zichtbaar" en "project bundle export en import herstelt projectdata".
 
 Live staat: lokale DB bevat 1 project.
 
