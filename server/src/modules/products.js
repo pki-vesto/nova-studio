@@ -3,6 +3,7 @@ const { db } = require("../db/database");
 const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
+const { flagFilter, likeFilter, textFilter } = require("./filtering");
 const { record } = require("./audit");
 
 const router = express.Router();
@@ -145,14 +146,26 @@ function parseCsv(text) {
   return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 }
 
-router.get("/", (_req, res) => {
+router.get("/", (req, res) => {
+  const filters = {
+    q: likeFilter(req.query.q),
+    category: textFilter(req.query.category),
+    status: textFilter(req.query.status),
+    supplier_id: textFilter(req.query.supplier_id),
+    favorites: flagFilter(req.query.favorites) ? 1 : 0
+  };
   res.json(db.prepare(`
     SELECT p.*, alt.name AS alternative_to_name,
       EXISTS(SELECT 1 FROM product_favorites f WHERE f.product_id = p.id) AS is_favorite
     FROM products p
     LEFT JOIN products alt ON alt.id = p.alternative_to_id
+    WHERE (@q = '%%' OR p.name LIKE @q OR p.brand LIKE @q OR p.supplier LIKE @q OR p.category LIKE @q OR p.sku LIKE @q)
+      AND (@category = '' OR p.category = @category)
+      AND (@status = '' OR p.status = @status)
+      AND (@supplier_id = '' OR p.supplier_id = @supplier_id)
+      AND (@favorites = 0 OR EXISTS(SELECT 1 FROM product_favorites f WHERE f.product_id = p.id))
     ORDER BY p.updated_at DESC, p.name
-  `).all());
+  `).all(filters));
 });
 
 router.post("/", upload.single("image"), validateForm(productSchema), (req, res) => {

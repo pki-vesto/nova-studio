@@ -5,6 +5,7 @@ const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { seedSampleProject } = require("./seed");
 const { stampOwnership, visibleProjectWhere } = require("./authorization");
+const { flagFilter, likeFilter, textFilter } = require("./filtering");
 
 const router = express.Router();
 
@@ -58,9 +59,9 @@ function scopedProject(req, projectId) {
 }
 
 router.get("/", (req, res) => {
-  const q = `%${req.query.q || ""}%`;
-  const status = req.query.status || "";
-  const templates = req.query.templates === "1";
+  const q = likeFilter(req.query.q);
+  const status = textFilter(req.query.status);
+  const templates = flagFilter(req.query.templates);
   const scope = visibleProjectWhere(req, "p");
   const projects = db.prepare(`
     SELECT p.*, c.name AS client_name

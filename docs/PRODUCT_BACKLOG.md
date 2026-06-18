@@ -224,7 +224,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 196. [Completed] Form validatie uniformeren met zod. (gecentraliseerd in `validate.js`, `validateBody`/`validateForm` op vrijwel alle write-endpoints; projects/auth via eigen inline zod met hetzelfde foutcontract)
 197. [Completed] API error format standaardiseren. (één envelope `{ error, details? }`, globale handler mapt ZodError→400/multer→413/`err.status`)
 198. [Not Started] API pagination voorbereiden.
-199. [Partial] API filtering standaardiseren. (query-filters per module; geen gedeelde laag)
+199. [Completed] API filtering standaardiseren. (`filtering.js` normaliseert tekst/LIKE/boolean filters; projects/clients/products gebruiken de helper en products ondersteunt `q`, `category`, `status`, `supplier_id`, `favorites`)
 200. [Not Started] API service layer introduceren waar domeinlogica groeit.
 
 ## V3

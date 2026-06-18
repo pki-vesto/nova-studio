@@ -4,6 +4,7 @@ const { db } = require("../db/database");
 const { id, parseJson } = require("./utils");
 const { validateBody } = require("./validate");
 const { stampOwnership, visibleOwnedWhere } = require("./authorization");
+const { likeFilter } = require("./filtering");
 
 const router = express.Router();
 
@@ -47,7 +48,7 @@ function hydrate(client) {
 }
 
 router.get("/", (req, res) => {
-  const q = `%${req.query.q || ""}%`;
+  const q = likeFilter(req.query.q);
   const scope = visibleOwnedWhere(req, "c");
   res.json(db.prepare(`
     SELECT c.*, COUNT(p.id) AS project_count, MAX(p.updated_at) AS last_project_at

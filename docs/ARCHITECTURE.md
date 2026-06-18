@@ -33,6 +33,8 @@ Conventie: schema's vermijden `.default()`. Daardoor blijven weggelaten optionel
 
 Globale error-handler (`server/src/index.js`): mapt een `ZodError` naar `400` met `details`, multer `LIMIT_FILE_SIZE` naar `413` ("Bestand is te groot"), respecteert een expliciete `err.status` en valt anders terug op `500`. De API-404 (`/api`) gebruikt dezelfde envelope.
 
+Queryfilter-conventie: `server/src/modules/filtering.js` levert gedeelde helpers voor tekstfilters (`textFilter`), LIKE-filters (`likeFilter`) en booleans (`flagFilter`). Project-, client- en productlijsten gebruiken deze normalisatie; productlijsten ondersteunen server-side `q`, `category`, `status`, `supplier_id` en `favorites=1`.
+
 Dekking: validatie is toegepast op de write-endpoints van vrijwel alle modules (products, proposals, suppliers, budget, planning, clients [contacts/addresses], colorLibrary, materialLibrary, designLibrary, materials, rooms, intake, knowledge, ai, portal, render, media, moodboards, floorplans). De twee uitzonderingen — `projects` en `auth` — gebruiken eigen inline zod-schema's met `safeParse`, maar leveren via de globale handler en hun eigen 400-responses hetzelfde foutcontract. Tests staan in `server/src/modules/validate.test.js`.
 
 ## Domeinarchitectuur
@@ -153,7 +155,7 @@ API's: CRUD onder `/api/material-library`; projectmaterialen onder `/api/materia
 
 ### Products
 
-Verantwoordelijkheden: productbibliotheek met CRUD + image upload, categorie-/zoekfilter. **Inkoop-/verkoopprijs, marge, btw, beschikbaarheidsstatus, prijsdatum**. **Varianten** (`parent_product_id`), **favorieten** (`product_favorites`), **vergelijken**, **CSV-import/-export**. Supplier-koppeling via `supplier_id`. Productselectie per project met quantity, designer-note, fit-reason, feature-markering, **itemstatus** (voorgesteld/akkoord/afgewezen), klantopmerking en alternatief-markering. Shoppinglijst + budgettotaal.
+Verantwoordelijkheden: productbibliotheek met CRUD + image upload, gestandaardiseerde server-side filters (`q`, `category`, `status`, `supplier_id`, `favorites`). **Inkoop-/verkoopprijs, marge, btw, beschikbaarheidsstatus, prijsdatum**. **Varianten** (`parent_product_id`), **favorieten** (`product_favorites`), **vergelijken**, **CSV-import/-export**. Supplier-koppeling via `supplier_id`. Productselectie per project met quantity, designer-note, fit-reason, feature-markering, **itemstatus** (voorgesteld/akkoord/afgewezen), klantopmerking en alternatief-markering. Shoppinglijst + budgettotaal.
 
 Datamodellen: `products`, `project_products`, `product_favorites`.
 

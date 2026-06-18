@@ -72,6 +72,39 @@ test("productselectie en shoppinglijst totaal", async () => {
   assert.equal(shopping.total, 2000, "2 × €1000");
 });
 
+test("productlijst filters werken uniform", async () => {
+  const supplier = await (await j("/api/suppliers", "POST", { name: "Studio Lijn" })).json();
+  const sofa = await (await j("/api/products", "POST", {
+    name: "Linnen bank",
+    brand: "Nova",
+    category: "Meubilair",
+    status: "approved",
+    supplier_id: supplier.id
+  })).json();
+  await j("/api/products", "POST", {
+    name: "Keramiek lamp",
+    brand: "Nova",
+    category: "Verlichting",
+    status: "candidate"
+  });
+  await j(`/api/products/${sofa.id}/favorite`, "POST", {});
+
+  const byQuery = await (await j("/api/products?q=linnen")).json();
+  assert.deepEqual(byQuery.map((p) => p.id), [sofa.id]);
+
+  const byCategory = await (await j("/api/products?category=Meubilair")).json();
+  assert.deepEqual(byCategory.map((p) => p.id), [sofa.id]);
+
+  const byStatus = await (await j("/api/products?status=approved")).json();
+  assert.deepEqual(byStatus.map((p) => p.id), [sofa.id]);
+
+  const bySupplier = await (await j(`/api/products?supplier_id=${supplier.id}`)).json();
+  assert.deepEqual(bySupplier.map((p) => p.id), [sofa.id]);
+
+  const favorites = await (await j("/api/products?favorites=1")).json();
+  assert.deepEqual(favorites.map((p) => p.id), [sofa.id]);
+});
+
 test("room finish schedule bundelt kleuren materialen en notities", async () => {
   const project = await (await j("/api/projects", "POST", { title: "Afwerkproject" })).json();
   const room = await (await j("/api/rooms", "POST", {
