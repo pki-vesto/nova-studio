@@ -60,9 +60,9 @@ Getest: geen.
 
 Live staat: 0 floorplans.
 
-### Moodboards (edit/tags/varianten/feedback/promote)
+### Moodboards (edit/tags/layout/varianten/feedback/promote)
 
-Werkt: moodboards aanmaken/bewerken/verwijderen, assets uploaden met **caption/bron-URL/tags/sortering**, **varianten** (`/:id/variant` met `variant_of_id`/`variant_label`/`layout_json`), **klantfeedback** (`moodboard_feedback`, sentiment + body), **promote naar Design Library** (`/:id/promote`). Editorial moodboardgrid in `Moodboard.jsx`.
+Werkt: moodboards aanmaken/bewerken/verwijderen, assets uploaden met **caption/bron-URL/tags/sortering**, een drag-canvas dat assetposities bewaart in `layout_json.assets` en de zichtbare collage voedt, **varianten** (`/:id/variant` met `variant_of_id`/`variant_label`/`layout_json`), **klantfeedback** (`moodboard_feedback`, sentiment + body), **promote naar Design Library** (`/:id/promote`). Editorial moodboardgrid in `Moodboard.jsx`.
 
 Getest: geen.
 

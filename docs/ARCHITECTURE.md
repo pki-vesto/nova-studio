@@ -113,7 +113,7 @@ API's: `GET /api/floorplans/project/:projectId`, `POST /api/floorplans`, `PUT /a
 
 ### Moodboards
 
-Verantwoordelijkheden: moodboards en assetuploads (caption/bron-URL/tags/sortering), **varianten** (`variant_of_id`/`variant_label`/`layout_json`), **klantfeedback** (`moodboard_feedback`, sentiment + body) en **promote naar Design Library**.
+Verantwoordelijkheden: moodboards en assetuploads (caption/bron-URL/tags/sortering), layout-canvas met genormaliseerde assetposities in `layout_json.assets` voor editor en zichtbare collage, **varianten** (`variant_of_id`/`variant_label`/`layout_json`), **klantfeedback** (`moodboard_feedback`, sentiment + body) en **promote naar Design Library**.
 
 Datamodellen: `moodboards`, `moodboard_assets`, `moodboard_feedback`.
 
