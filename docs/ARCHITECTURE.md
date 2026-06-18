@@ -267,6 +267,8 @@ API's: globale feed of gefilterd per entity/entity_id onder `/api/audit`.
 
 Verantwoordelijkheden: fullscreen presentatie uit projectdata, moodboard-assets, materiaal-/productpagina's, budgetblok, keyboard-navigatie, configureerbare paginavolgorde, presenter notes en een klantmodus zonder edit-chrome.
 
+Export-besluit: de Presentation Engine blijft een live, schermvullende presentatielaag zonder eigen PDF-route. Printbare/archiefwaardige klant- en interne artefacten lopen via de Proposal PDF-engine, inclusief appendices en exportgeschiedenis; een aparte slide-export zou dezelfde projectdata dupliceren zonder extra bron van waarheid.
+
 Datamodellen: geen eigen tabel; gebruikt geladen project-, moodboard- en shoppingdata.
 
 Services: `web/src/screens/Presentation.jsx`.

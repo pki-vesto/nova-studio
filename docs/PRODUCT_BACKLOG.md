@@ -139,7 +139,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 111. [Completed] Presentation pagina's configureerbaar maken.
 112. [Completed] Presentation presenter notes toevoegen.
 113. [Completed] Presentation klantmodus zonder edit chrome.
-114. [Partial] Presentation export naar PDF onderzoeken. (proposal-PDF dekt dit; geen aparte slide-export)
+114. [Completed] Presentation export naar PDF onderzoeken. (besluit: proposal-PDF is het printbare artefact; geen aparte slide-export)
 115. [Completed] Presentation volgorde per project opslaan.
 116. [Partial] Moodboard layout-editor bouwen. (layout_json + variant-UI; geen drag-canvas)
 117. [Completed] Moodboard asset captions bewerken.
