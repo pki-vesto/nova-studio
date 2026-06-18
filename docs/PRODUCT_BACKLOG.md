@@ -107,7 +107,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 82. [Completed] Projectduplicatie uitbreiden met materials.
 83. [Completed] Projectduplicatie uitbreiden met moodboards.
 84. [Completed] Projectduplicatie uitbreiden met productselecties.
-85. [Partial] Projecttemplates zichtbaar beheren. (vlag + filter aanwezig; geen dedicated templatebeheer-UI)
+85. [Completed] Projecttemplates zichtbaar beheren. (dedicated templates-mode met template-aanmaak en openen)
 86. [Completed] Templatefilter in UI activeren.
 87. [Partial] Project statusmodel documenteren in app.
 88. [Completed] Client contacts UI bouwen.
