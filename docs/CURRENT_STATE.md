@@ -112,7 +112,7 @@ Live staat: leeg.
 
 Werkt: proposal CRUD. **Configureerbare secties** (`proposal_sections`: kind, titel, body, audience client/internal, aan/uit, volgorde + reorder-endpoint; standaard secties worden geseed bij aanmaak). **Versies** (`/:id/new-version` kloont scalars + secties, `version`-veld). **Statusflow** (`/:id/status`: concept → verzonden → geaccepteerd, zet `accepted_at`). **Comments per sectie** (`proposal_comments`). **PDF-theming**: editorial cover + per-sectie rendering per audience, met expliciete workflow-waarschuwingen i.p.v. fillertekst en **appendices** wanneer data bestaat. **Exportgeschiedenis** (`/:id/exports`) en klantvriendelijke bestandsnaam met versie/audience. **Projectoverdracht-PDF** (`POST /api/proposals/:projectId/handover-pdf`): klantveilige close-out die ruimtes, materialen, geselecteerde producten (zonder inkoopprijs/marge) en een index van `project_documents` bundelt, met Europe/Amsterdam-datum in bestandsnaam en cover.
 
-Getest: API-tests "voorstel aanmaken, secties geseed en PDF-export", "proposal status flow zet accepted_at", "projectoverdracht PDF bundelt ruimtes materialen producten en documenten zonder inkoopdata" en "projectoverdracht PDF rendert werkflow-waarschuwingen voor leeg project en geeft 404".
+Getest: API-tests "voorstel aanmaken, secties geseed en PDF-export", "proposal PDF visual smoke bewaakt documentstructuur", "proposal status flow zet accepted_at", "projectoverdracht PDF bundelt ruimtes materialen producten en documenten zonder inkoopdata" en "projectoverdracht PDF rendert werkflow-waarschuwingen voor leeg project en geeft 404".
 
 Live staat: 0 proposals.
 

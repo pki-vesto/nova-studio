@@ -44,6 +44,18 @@ const j = (path, method, body) => fetch(`${base}${path}`, {
   body: body ? JSON.stringify(body) : undefined
 });
 
+function pdfStructure(buffer) {
+  const text = buffer.toString("latin1");
+  return {
+    header: text.slice(0, 5),
+    pageCount: (text.match(/\/Type\s*\/Page\b/g) || []).length,
+    hasA4MediaBox: text.includes("/MediaBox [0 0 595.28 841.89]"),
+    fontRefs: (text.match(/\/Font\b/g) || []).length,
+    hasCatalog: text.includes("/Type /Catalog"),
+    hasTrailer: text.includes("%%EOF")
+  };
+}
+
 test("client aanmaken", async () => {
   const res = await j("/api/clients", "POST", { name: "Familie De Vries", email: "vries@example.nl" });
   assert.equal(res.status, 201);
@@ -294,6 +306,42 @@ test("voorstel aanmaken, secties geseed en PDF-export", async () => {
   const onDisk = path.join(process.env.NOVA_EXPORT_DIR, path.basename(out.path));
   assert.ok(fs.existsSync(onDisk), "PDF written to export dir");
   assert.ok(fs.statSync(onDisk).size > 500, "PDF is non-trivial");
+});
+
+test("proposal PDF visual smoke bewaakt documentstructuur", async () => {
+  const project = await (await j("/api/projects", "POST", {
+    title: "Visual Smoke Proposal",
+    clientName: "Familie Smoke",
+    address: "Rotterdam",
+    brief: "Warme basis met natuurlijke materialen"
+  })).json();
+  const room = await (await j("/api/rooms", "POST", { project_id: project.id, name: "Woonkamer", concept: "Rustig en tactiel" })).json();
+  const product = await (await j("/api/products", "POST", { name: "Linnen bank", brand: "Nova", price: 2400 })).json();
+  await j("/api/products/select", "POST", { project_id: project.id, room_id: room.id, product_id: product.id, quantity: 1 });
+  await j("/api/materials", "POST", { project_id: project.id, name: "Travertin", spec: "Gezoet", application: "Salontafel" });
+  const proposal = await (await j("/api/proposals", "POST", {
+    project_id: project.id,
+    title: "Visual Smoke Voorstel",
+    intro_text: "Een rustige basis met zichtbare materialen.",
+    style_direction: "Warm minimalisme",
+    color_advice: "Kalk, linnen en salie",
+    closing_text: "Na akkoord werken we planning en inkoop uit."
+  })).json();
+
+  const exportRes = await j(`/api/proposals/${proposal.id}/export-pdf?audience=client`, "POST");
+  assert.equal(exportRes.status, 200);
+  const out = await exportRes.json();
+  const onDisk = path.join(process.env.NOVA_EXPORT_DIR, path.basename(out.path));
+  const pdf = fs.readFileSync(onDisk);
+  const structure = pdfStructure(pdf);
+
+  assert.equal(structure.header, "%PDF-");
+  assert.ok(pdf.length > 2000, "visual smoke PDF has meaningful size");
+  assert.ok(structure.pageCount >= 2, "proposal has cover plus body pages");
+  assert.equal(structure.hasA4MediaBox, true, "proposal renders on A4 pages");
+  assert.ok(structure.fontRefs >= 1, "proposal has font resources");
+  assert.equal(structure.hasCatalog, true, "proposal has a PDF catalog");
+  assert.equal(structure.hasTrailer, true, "proposal has a complete trailer");
 });
 
 test("product price history capture en surface", async () => {
