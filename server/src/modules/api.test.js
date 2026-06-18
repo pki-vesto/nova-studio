@@ -27,6 +27,7 @@ app.use(express.json());
 app.use("/api/clients", require("./clients"));
 app.use("/api/projects", require("./projects"));
 app.use("/api/products", require("./products"));
+app.use("/api/intake", require("./intake"));
 app.use("/api/rooms", require("./rooms"));
 app.use("/api/materials", require("./materials"));
 app.use("/api/suppliers", require("./suppliers"));
@@ -60,6 +61,23 @@ test("project aanmaken met nieuwe klant en in lijst zichtbaar", async () => {
   assert.ok(project.intake, "intake row hydrated");
   const list = await (await j("/api/projects?status=")).json();
   assert.ok(list.some((p) => p.id === project.id), "project appears in list");
+});
+
+test("intake questionnaire is configurable", async () => {
+  const initial = await (await j("/api/intake/questionnaire")).json();
+  assert.ok(initial.some((q) => q.key === "wishes"), "default questions are seeded");
+
+  const next = initial.map((q) => q.key === "wishes"
+    ? { ...q, label: "Ontwerpvraag", placeholder: "Wat moet het ontwerp oplossen?", sort_order: 5, is_enabled: true }
+    : q);
+  const res = await j("/api/intake/questionnaire", "PUT", { questions: next });
+  assert.equal(res.status, 200);
+  const saved = await res.json();
+  const wishes = saved.find((q) => q.key === "wishes");
+  assert.equal(wishes.label, "Ontwerpvraag");
+  assert.equal(wishes.placeholder, "Wat moet het ontwerp oplossen?");
+  assert.equal(wishes.sort_order, 5);
+  assert.equal(wishes.is_enabled, true);
 });
 
 test("productselectie en shoppinglijst totaal", async () => {

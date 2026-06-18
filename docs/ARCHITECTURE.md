@@ -81,13 +81,13 @@ API's: `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST /api/project
 
 ### Intake
 
-Verantwoordelijkheden: projectintake opslaan en bijwerken, inclusief scope-inschatting, risico's en vervolgvragen.
+Verantwoordelijkheden: projectintake opslaan en bijwerken, inclusief scope-inschatting, risico's en vervolgvragen. De intakevragenlijst is configureerbaar via server-backed labels/placeholders/volgorde/aan-uit in `intake_questionnaire`.
 
-Datamodellen: `intake` (incl. `ai_summary`, `scope_estimate`, `risks_json`, `followups_json`).
+Datamodellen: `intake` (incl. `ai_summary`, `scope_estimate`, `risks_json`, `followups_json`) en `intake_questionnaire`.
 
 Services: `server/src/modules/intake.js`, `web/src/screens/Intake.jsx` (volwaardige projecttab).
 
-API's: `PUT /api/intake/:projectId` (gevalideerd via `validateBody`).
+API's: `GET/PUT /api/intake/questionnaire`, `PUT /api/intake/:projectId` (gevalideerd via `validateBody`).
 
 ### Rooms
 

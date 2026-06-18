@@ -38,7 +38,7 @@ Live staat: lokale DB bevat 1 project.
 
 ### Intake (scope/risks/followups + UI-tab)
 
-Werkt: intake upsert per project via API. Nieuwe velden `scope_estimate`, `risks_json`, `followups_json` naast de bestaande intakevelden en `ai_summary`. Volwaardige **Intake-projecttab** (`Intake.jsx`) toont en bewerkt alle velden, inclusief scope-inschatting, risico's en vervolgvragen.
+Werkt: intake upsert per project via API. Nieuwe velden `scope_estimate`, `risks_json`, `followups_json` naast de bestaande intakevelden en `ai_summary`. Volwaardige **Intake-projecttab** (`Intake.jsx`) toont en bewerkt alle velden, inclusief scope-inschatting, risico's en vervolgvragen. De vragenlijst is configureerbaar via `intake_questionnaire`: labels, placeholders, volgorde en aan/uit-status worden server-side bewaard.
 
 Getest: intake-row wordt mee-gehydrateerd in de project-API-test.
 
