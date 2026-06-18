@@ -4,6 +4,7 @@ const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
 const { record } = require("./audit");
+const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
 
 const router = express.Router();
 
@@ -145,14 +146,21 @@ function parseCsv(text) {
   return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 }
 
-router.get("/", (_req, res) => {
+router.get("/", (req, res) => {
+  const paged = hasPagination(req.query);
+  const page = parsePagination(req.query);
+  if (paged) {
+    const total = db.prepare("SELECT COUNT(*) AS total FROM products").get().total;
+    setPaginationHeaders(res, { total, ...page });
+  }
   res.json(db.prepare(`
     SELECT p.*, alt.name AS alternative_to_name,
       EXISTS(SELECT 1 FROM product_favorites f WHERE f.product_id = p.id) AS is_favorite
     FROM products p
     LEFT JOIN products alt ON alt.id = p.alternative_to_id
     ORDER BY p.updated_at DESC, p.name
-  `).all());
+    ${paginationSql(paged)}
+  `).all(page));
 });
 
 router.post("/", upload.single("image"), validateForm(productSchema), (req, res) => {
