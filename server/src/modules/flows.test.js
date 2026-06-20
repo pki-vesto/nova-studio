@@ -19,6 +19,7 @@ fs.mkdirSync(tmp, { recursive: true });
 
 const express = require("express");
 const { migrate } = require("../db/schema");
+const { db } = require("../db/database");
 
 migrate();
 
@@ -26,6 +27,9 @@ const app = express();
 app.use(express.json());
 app.use("/api/projects", require("./projects"));
 app.use("/api/products", require("./products"));
+app.use("/api/materials", require("./materials"));
+app.use("/api/suppliers", require("./suppliers"));
+app.use("/api/knowledge", require("./knowledge"));
 app.use("/api/portal", require("./portal"));
 app.use("/api/budget", require("./budget"));
 app.use("/api/ai", require("./ai"));
@@ -57,6 +61,60 @@ test("budget overview computes spent, margin and VAT from effective prices", asy
   assert.equal(o.margin_total, 800, "2 × (1200 - 800)");
   assert.equal(o.vat_total, 504, "2 × 1200 × 21%");
   assert.equal(o.remaining, 2600, "5000 - 2400");
+});
+
+test("knowledge auto-edges link product selections idempotently and traverse project to supplier", async () => {
+  const supplier = (await j("/api/suppliers", "POST", { name: "Edge Supplier" })).body;
+  const project = (await j("/api/projects", "POST", { title: "Edge Project" })).body;
+  const product = (await j("/api/products", "POST", {
+    name: "Edge Product",
+    supplier_id: supplier.id
+  })).body;
+
+  await j("/api/products/select", "POST", { project_id: project.id, product_id: product.id });
+  await j("/api/products/select", "POST", { project_id: project.id, product_id: product.id });
+
+  const projectNode = db.prepare("SELECT * FROM knowledge_nodes WHERE type = 'project' AND ref_id = ?").get(project.id);
+  const productNode = db.prepare("SELECT * FROM knowledge_nodes WHERE type = 'product' AND ref_id = ?").get(product.id);
+  const supplierNode = db.prepare("SELECT * FROM knowledge_nodes WHERE type = 'supplier' AND ref_id = ?").get(supplier.id);
+  const clientNode = db.prepare("SELECT * FROM knowledge_nodes WHERE type = 'client' AND ref_id = ?").get(project.client_id);
+  assert.ok(projectNode, "project node promoted");
+  assert.ok(productNode, "product node promoted");
+  assert.ok(supplierNode, "supplier node promoted");
+  assert.ok(clientNode, "client node promoted from project client_id");
+
+  const bevatCount = db.prepare(`
+    SELECT COUNT(*) AS count FROM knowledge_edges
+    WHERE from_id = ? AND to_id = ? AND relation = 'bevat'
+  `).get(projectNode.id, productNode.id).count;
+  assert.equal(bevatCount, 1, "repeated selection creates exactly one project-product edge");
+
+  const supplierEdgeCount = db.prepare(`
+    SELECT COUNT(*) AS count FROM knowledge_edges
+    WHERE from_id = ? AND to_id = ? AND relation = 'leverancier'
+  `).get(productNode.id, supplierNode.id).count;
+  assert.equal(supplierEdgeCount, 1, "product supplier_id creates supplier edge");
+
+  const clientEdgeCount = db.prepare(`
+    SELECT COUNT(*) AS count FROM knowledge_edges
+    WHERE from_id = ? AND to_id = ? AND relation = 'klant'
+  `).get(projectNode.id, clientNode.id).count;
+  assert.equal(clientEdgeCount, 1, "project client_id creates client edge");
+
+  const material = (await j("/api/materials", "POST", {
+    project_id: project.id,
+    name: "Edge Material"
+  })).body;
+  const materialNode = db.prepare("SELECT * FROM knowledge_nodes WHERE type = 'material' AND ref_id = ?").get(material.id);
+  assert.ok(materialNode, "material node promoted");
+  const materialEdgeCount = db.prepare(`
+    SELECT COUNT(*) AS count FROM knowledge_edges
+    WHERE from_id = ? AND to_id = ? AND relation = 'gebruikt'
+  `).get(projectNode.id, materialNode.id).count;
+  assert.equal(materialEdgeCount, 1, "project material create links material edge");
+
+  const pathResult = (await j(`/api/knowledge/path?from=${projectNode.id}&to=${supplierNode.id}`)).body;
+  assert.deepEqual(pathResult.path.map((node) => node.id), [projectNode.id, productNode.id, supplierNode.id]);
 });
 
 test("client portal: client-safe view + per-product approval writes back the selection status", async () => {
