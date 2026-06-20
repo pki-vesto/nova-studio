@@ -5,6 +5,7 @@ const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { seedSampleProject } = require("./seed");
 const { stampOwnership, visibleProjectWhere } = require("./authorization");
+const { linkEntities } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -114,6 +115,9 @@ router.post("/", (req, res) => {
     db.prepare("INSERT INTO intake (project_id) VALUES (?)").run(projectId);
   });
   tx();
+  if (clientId) {
+    linkEntities("project", projectId, "client", clientId, "klant");
+  }
   res.status(201).json(hydrateProject(db.prepare(`
     SELECT p.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone
     FROM projects p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id = ?
@@ -167,7 +171,11 @@ router.put("/:id", (req, res) => {
     db.prepare(`UPDATE projects SET ${set.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = @id`).run(params);
   }
   const scope = visibleProjectWhere(req, "p");
-  res.json(hydrateProject(db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params })));
+  const project = db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params });
+  if (project?.client_id) {
+    linkEntities("project", req.params.id, "client", project.client_id, "klant");
+  }
+  res.json(hydrateProject(project));
 });
 
 // Cover/hero image for the editorial proposal + presentation.

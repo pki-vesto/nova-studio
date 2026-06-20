@@ -4,6 +4,7 @@ const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
 const { record } = require("./audit");
+const { linkEntities } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -195,6 +196,9 @@ router.post("/", upload.single("image"), validateForm(productSchema), (req, res)
     sale_price: salePrice,
     price: Number(req.body.price || 0)
   }, "initial");
+  if (req.body.supplier_id) {
+    linkEntities("product", productId, "supplier", req.body.supplier_id, "leverancier");
+  }
   res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(productId));
 });
 
@@ -283,7 +287,11 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
       to: { purchase_price: purchasePrice, sale_price: salePrice, price: newPrice }
     }));
   }
-  res.json(db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id));
+  const updated = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+  if (updated?.supplier_id) {
+    linkEntities("product", req.params.id, "supplier", updated.supplier_id, "leverancier");
+  }
+  res.json(updated);
 });
 
 router.delete("/:id", (req, res) => {
@@ -352,7 +360,11 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
     availability_status: req.body.availability_status || "unknown",
     price_date: req.body.price_date || ""
   });
-  res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(variantId));
+  const created = db.prepare("SELECT * FROM products WHERE id = ?").get(variantId);
+  if (created?.supplier_id) {
+    linkEntities("product", variantId, "supplier", created.supplier_id, "leverancier");
+  }
+  res.status(201).json(created);
 });
 
 // --- Favorites ---------------------------------------------------------------
@@ -487,6 +499,7 @@ router.post("/select", validateBody(selectSchema), (req, res) => {
     req.body.client_comment || "",
     req.body.is_alternative ? 1 : 0
   );
+  linkEntities("project", req.body.project_id, "product", req.body.product_id, "bevat");
   res.status(201).json(db.prepare("SELECT * FROM project_products WHERE id = ?").get(selectionId));
 });
 

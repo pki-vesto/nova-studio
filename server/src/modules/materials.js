@@ -4,6 +4,7 @@ const { id, uploadUrl } = require("./utils");
 const { record } = require("./audit");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
+const { linkEntities } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -129,6 +130,7 @@ router.post("/", upload.single("image"), validateForm(materialSchema), (req, res
     supplier_id: req.body.supplier_id || null,
     library_id: req.body.library_id || null
   });
+  linkEntities("project", req.body.project_id, "material", materialId, "gebruikt");
   res.status(201).json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(materialId)));
 });
 
@@ -174,6 +176,7 @@ router.post("/from-library", validateBody(fromLibrarySchema), (req, res) => {
     sustainability_score: Number(lib.sustainability_score || 0),
     library_id: lib.id
   });
+  linkEntities("project", project_id, "material", materialId, "gebruikt");
   res.status(201).json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(materialId)));
 });
 
