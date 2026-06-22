@@ -14,6 +14,18 @@ const KIND_BY_LAYER = {
   furniture: ["sofa", "table", "chair", "bed", "cabinet", "rug", "lamp"],
   annotations: ["note", "dimension", "marker", "label"]
 };
+const OBJECT_LIBRARY = [
+  { key: "sofa-3-seat", label: "Bank 3-zits", layer: "furniture", kind: "sofa", geometry: { w: 180, h: 88, rotation: 0 } },
+  { key: "dining-table-6", label: "Eettafel 6p", layer: "furniture", kind: "table", geometry: { w: 180, h: 90, rotation: 0 } },
+  { key: "lounge-chair", label: "Fauteuil", layer: "furniture", kind: "chair", geometry: { w: 78, h: 78, rotation: 0 } },
+  { key: "queen-bed", label: "Bed 160", layer: "furniture", kind: "bed", geometry: { w: 160, h: 210, rotation: 0 } },
+  { key: "cabinet-low", label: "Lage kast", layer: "furniture", kind: "cabinet", geometry: { w: 160, h: 45, rotation: 0 } },
+  { key: "rug-large", label: "Vloerkleed", layer: "furniture", kind: "rug", geometry: { w: 240, h: 170, rotation: 0 } },
+  { key: "swing-door", label: "Draaideur", layer: "walls", kind: "door", geometry: { w: 90, h: 12, rotation: 0 } },
+  { key: "window-wide", label: "Breed raam", layer: "walls", kind: "window", geometry: { w: 160, h: 10, rotation: 0 } },
+  { key: "marker-room", label: "Ruimtemarker", layer: "annotations", kind: "marker", geometry: { w: 24, h: 24, rotation: 0 } },
+  { key: "note-callout", label: "Notitie", layer: "annotations", kind: "note", geometry: { w: 120, h: 42, rotation: 0 } }
+];
 
 function isPdf(name) {
   return !!name && /\.pdf$/i.test(name);
@@ -407,7 +419,7 @@ function ObjectsPanel({ ctx, plan }) {
   const [objects, setObjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [materials, setMaterials] = useState([]);
-  const [form, setForm] = useState({ layer: "walls", kind: "wall", label: "", product_id: "", material_id: "" });
+  const [form, setForm] = useState({ presetKey: "", layer: "walls", kind: "wall", label: "", product_id: "", material_id: "", geometry: {} });
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({ label: "", product_id: "", material_id: "" });
@@ -436,7 +448,22 @@ function ObjectsPanel({ ctx, plan }) {
   }, [project?.id]);
 
   function pickLayer(layer) {
-    setForm((p) => ({ ...p, layer, kind: KIND_BY_LAYER[layer][0] }));
+    setForm((p) => ({ ...p, presetKey: "", layer, kind: KIND_BY_LAYER[layer][0], geometry: {} }));
+  }
+  function applyPreset(key) {
+    const preset = OBJECT_LIBRARY.find((item) => item.key === key);
+    if (!preset) {
+      setForm((p) => ({ ...p, presetKey: "", geometry: {} }));
+      return;
+    }
+    setForm((p) => ({
+      ...p,
+      presetKey: preset.key,
+      layer: preset.layer,
+      kind: preset.kind,
+      label: p.label || preset.label,
+      geometry: { ...preset.geometry, library_key: preset.key, library_label: preset.label }
+    }));
   }
   async function add() {
     setBusy(true);
@@ -445,12 +472,12 @@ function ObjectsPanel({ ctx, plan }) {
         layer: form.layer,
         kind: form.kind,
         label: form.label.trim() || null,
-        geometry: {},
+        geometry: form.geometry || {},
         sort_order: objects.filter((o) => o.layer === form.layer).length,
         product_id: form.product_id || null,
         material_id: form.material_id || null
       });
-      setForm((p) => ({ ...p, label: "", product_id: "", material_id: "" }));
+      setForm((p) => ({ ...p, presetKey: "", label: "", product_id: "", material_id: "", geometry: {} }));
       await load();
     } catch (err) { fail(err); } finally { setBusy(false); }
   }
@@ -475,6 +502,12 @@ function ObjectsPanel({ ctx, plan }) {
   return (
     <div>
       <h4 className="serif" style={{ fontSize: 18, margin: "0 0 12px" }}>Objecten & lagen</h4>
+      <Field label="Objectenbibliotheek">
+        <select value={form.presetKey} onChange={(e) => applyPreset(e.target.value)}>
+          <option value="">— vrije invoer —</option>
+          {OBJECT_LIBRARY.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+        </select>
+      </Field>
       <div className="form-grid form-grid-2" style={{ marginBottom: 10 }}>
         <Field label="Laag">
           <select value={form.layer} onChange={(e) => pickLayer(e.target.value)}>
