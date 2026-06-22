@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
-import { Kicker } from "../components/primitives.jsx";
+import { EmptyState, InlineError, Kicker } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
 // Filled / outline star row used to render a 0–5 reliability rating.
@@ -269,14 +269,21 @@ export function Suppliers({ ctx }) {
   const { fail } = ctx;
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [editDrawer, setEditDrawer] = useState(null);   // null | {} | supplier
   const [detailId, setDetailId] = useState(null);
 
   async function load() {
+    setLoadError("");
+    setLoading(true);
     try {
       const data = await api.get("/api/suppliers");
       setList(Array.isArray(data) ? data : []);
-    } catch (err) { fail(err); } finally { setLoading(false); }
+    } catch (err) {
+      const message = err?.message || String(err);
+      setLoadError(message);
+      fail(err);
+    } finally { setLoading(false); }
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
@@ -298,13 +305,18 @@ export function Suppliers({ ctx }) {
 
       {loading ? (
         <p className="caption">Bezig met laden…</p>
+      ) : loadError ? (
+        <InlineError
+          title="Leveranciers konden niet worden geladen"
+          body={loadError}
+          action={<button className="btn btn-ghost" onClick={load}>Opnieuw proberen</button>}
+        />
       ) : list.length === 0 ? (
-        <div className="empty">
-          <p className="body" style={{ margin: 0 }}>
-            Nog geen leveranciers. Leg je vaste bronnen vast — met contactpersonen, voorwaarden en levertijden, zodat je per project snel de juiste partij vindt.
-          </p>
-          <button className="btn btn-clay" onClick={() => setEditDrawer({})}><Icon name="plus" size={15} /> Eerste leverancier</button>
-        </div>
+        <EmptyState
+          title="Nog geen leveranciers"
+          body="Leg vaste bronnen vast met contactpersonen, voorwaarden en levertijden, zodat je per project snel de juiste partij vindt."
+          action={<button className="btn btn-clay" onClick={() => setEditDrawer({})}><Icon name="plus" size={15} /> Eerste leverancier</button>}
+        />
       ) : (
         <>
           <div className="row between middle wrap" style={{ marginBottom: 36 }}>

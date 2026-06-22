@@ -5,6 +5,7 @@ const { id, parseJson } = require("./utils");
 const { validateBody } = require("./validate");
 const { stampOwnership, visibleOwnedWhere } = require("./authorization");
 const { likeFilter } = require("./filtering");
+const { safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -47,6 +48,14 @@ function hydrate(client) {
   };
 }
 
+function promoteClient(row) {
+  if (!row) return;
+  safePromote("client", row.id, row.name, {
+    name: row.name || "",
+    company: row.company || ""
+  });
+}
+
 router.get("/", (req, res) => {
   const q = likeFilter(req.query.q);
   const scope = visibleOwnedWhere(req, "c");
@@ -68,7 +77,9 @@ router.post("/", (req, res) => {
     INSERT INTO clients (id, name, company, email, phone, address, notes, preferences_json, studio_id, owner_id)
     VALUES (@id, @name, @company, @email, @phone, @address, @notes, @preferences_json, @studio_id, @owner_id)
   `).run(stampOwnership({ id: clientId, ...input, preferences_json: JSON.stringify(input.preferences || {}), studio_id: null, owner_id: null }, req.user));
-  res.status(201).json(hydrate(db.prepare("SELECT * FROM clients WHERE id = ?").get(clientId)));
+  const client = db.prepare("SELECT * FROM clients WHERE id = ?").get(clientId);
+  promoteClient(client);
+  res.status(201).json(hydrate(client));
 });
 
 router.get("/:id", (req, res) => {
@@ -93,7 +104,9 @@ router.put("/:id", (req, res) => {
     db.prepare(`UPDATE clients SET ${fields.map((field) => `${field} = @${field}`).join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = @id`).run(payload);
   }
   const scope = visibleOwnedWhere(req, "c");
-  res.json(hydrate(db.prepare(`SELECT c.* FROM clients c WHERE c.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params })));
+  const client = db.prepare(`SELECT c.* FROM clients c WHERE c.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params });
+  promoteClient(client);
+  res.json(hydrate(client));
 });
 
 router.delete("/:id", (req, res) => {

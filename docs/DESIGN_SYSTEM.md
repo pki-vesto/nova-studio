@@ -92,4 +92,4 @@ Presentaties zijn fullscreen, visueel rustig en klantklaar. Ze gebruiken project
 
 ## Print en PDF
 
-Browserprint bestaat voor het proposaldocument. Server-side PDF bestaat via PDFKit, maar moet visueel dichter naar het design system. Print/PDF mag nooit afhankelijk zijn van verborgen UI-controls.
+Browserprint bestaat voor het proposaldocument met A4-pagina's, page breaks per documentpagina, verborgen app-chrome en expliciet printkleurbehoud voor cover, placeholders en swatches. Server-side PDF bestaat via PDFKit, maar moet visueel dichter naar het design system. Print/PDF mag nooit afhankelijk zijn van verborgen UI-controls.
