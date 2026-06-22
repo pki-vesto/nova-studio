@@ -64,6 +64,7 @@ export function DesignLibraryScreen({ ctx }) {
   const [kind, setKind] = useState("Alle");
   const [loadError, setLoadError] = useState("");
   const [drawer, setDrawer] = useState(null); // null | {} | item
+  const [promoting, setPromoting] = useState("");
 
   const load = useCallback(async () => {
     setLoadError("");
@@ -86,6 +87,59 @@ export function DesignLibraryScreen({ ctx }) {
     try { await api.del(`/api/design-library/${id}`); await load(); }
     catch (err) { ctx.fail(err); }
   }
+  async function saveCurrentSet(kind) {
+    if (!ctx.project) return;
+    const productItems = ctx.shopping?.items || [];
+    const materialItems = ctx.project.materials || [];
+    const isProductSet = kind === "product_set";
+    const source = isProductSet ? productItems : materialItems;
+    if (source.length === 0) return;
+    setPromoting(kind);
+    try {
+      await api.json("/api/design-library/promote", "POST", {
+        kind,
+        title: `${ctx.project.title} — ${isProductSet ? "productset" : "materiaalset"}`,
+        summary: isProductSet ? `${source.length} producten uit de shoppinglijst` : `${source.length} materialen uit het project`,
+        body: isProductSet
+          ? source.map((item) => `${item.quantity || 1}x ${item.name}`).join("\n")
+          : source.map((item) => [item.name, item.application].filter(Boolean).join(" — ")).join("\n"),
+        tags: isProductSet ? "productset, shoppinglijst" : "materiaalset, materialen",
+        source_project_id: ctx.project.id,
+        data: isProductSet
+          ? {
+            products: source.map((item) => ({
+              product_id: item.product_id,
+              name: item.name,
+              brand: item.brand || "",
+              category: item.category || "",
+              room_id: item.room_id || "",
+              room_name: item.room_name || "",
+              quantity: item.quantity || 1,
+              note: item.designer_note || "",
+              fit_reason: item.fit_reason || ""
+            }))
+          }
+          : {
+            materials: source.map((item) => ({
+              material_id: item.id,
+              name: item.name,
+              brand: item.brand || "",
+              code: item.code || "",
+              spec: item.spec || "",
+              application: item.application || "",
+              maintenance: item.maintenance || "",
+              sustainability_score: item.sustainability_score || 0,
+              sample_status: item.sample_status || "none"
+            }))
+          }
+      });
+      await load();
+    } catch (err) { ctx.fail(err); }
+    finally { setPromoting(""); }
+  }
+
+  const productCount = ctx.shopping?.items?.length || 0;
+  const materialCount = ctx.project?.materials?.length || 0;
 
   return (
     <div className="content content-wide rise">
@@ -100,13 +154,38 @@ export function DesignLibraryScreen({ ctx }) {
           body={loadError}
           action={<button className="btn btn-ghost" onClick={load}>Opnieuw proberen</button>}
         />
-      ) : items.length === 0 ? (
-        <EmptyState
-          title="Nog geen items"
-          body="Leg concepten, ruimte-templates, product- en materiaalsets en voorstel-snippets vast, zodat ze herbruikbaar zijn in elk project."
-          action={<button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Eerste item</button>}
-        />
       ) : (
+        <>
+          {ctx.project && (productCount > 0 || materialCount > 0) && (
+            <div className="card" style={{ padding: "18px 20px", marginBottom: 28 }}>
+              <div className="row between middle wrap" style={{ gap: 14 }}>
+                <div>
+                  <Kicker style={{ marginBottom: 6 }}>Uit huidig project</Kicker>
+                  <div className="body" style={{ fontSize: 14, margin: 0 }}>Bewaar product- en materiaalcombinaties als herbruikbare sets.</div>
+                </div>
+                <div className="row gap2 wrap">
+                  {productCount > 0 && (
+                    <button className="btn btn-clay" onClick={() => saveCurrentSet("product_set")} disabled={!!promoting}>
+                      <Icon name="cart" size={14} /> {promoting === "product_set" ? "Opslaan..." : `Productset (${productCount})`}
+                    </button>
+                  )}
+                  {materialCount > 0 && (
+                    <button className="btn btn-ghost" onClick={() => saveCurrentSet("material_set")} disabled={!!promoting}>
+                      <Icon name="layers" size={14} /> {promoting === "material_set" ? "Opslaan..." : `Materiaalset (${materialCount})`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {items.length === 0 ? (
+            <EmptyState
+              title="Nog geen items"
+              body="Leg concepten, ruimte-templates, product- en materiaalsets en voorstel-snippets vast, zodat ze herbruikbaar zijn in elk project."
+              action={<button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Eerste item</button>}
+            />
+          ) : (
         <>
           <div className="row between middle wrap" style={{ gap: 16, marginBottom: 36 }}>
             <div className="row gap2 wrap">
@@ -148,6 +227,8 @@ export function DesignLibraryScreen({ ctx }) {
               </article>
               ))}
             </div>
+          )}
+            </>
           )}
         </>
       )}
