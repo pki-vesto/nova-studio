@@ -114,7 +114,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 89. [Completed] Client addresses UI bouwen.
 90. [Completed] Klantnotities zichtbaar maken bij project.
 91. [Partial] Globale zoekresultaten per type groeperen. (command palette groepeert views/tabs/projecten)
-92. [Partial] Productcategorieën beheerbaar maken. (vrije categorie + filter; geen beheerd vocabularium)
+92. [Completed] Productcategorieën beheerbaar maken. (beheerde categorieën met CRUD, productkoppeling en bibliotheekfilter)
 93. [Completed] Shoppinglijst selectie persistent maken.
 94. [Completed] Shoppinglijst export naar CSV.
 95. [Completed] Materialen bewerken vanuit UI.
