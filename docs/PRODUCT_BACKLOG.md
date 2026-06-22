@@ -216,7 +216,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 188. [Completed] Soft delete strategie bepalen. (projects deleted_at + undelete)
 189. [Not Started] Import/export volledige projectbundel.
 190. [Completed] Back-up hersteltest documenteren. (`docs/BACKUP_RUNBOOK.md`)
-191. [Not Started] Accessibility audit uitvoeren.
+191. [Completed] Accessibility audit uitvoeren. (`docs/ACCESSIBILITY_AUDIT.md`)
 192. [Completed] Mobile responsive polish. (compacte mobile shell/topbar, scrollbare acties/projecttabs, stacked page-heads/drawers/buttons en responsive Project Overview hero/spec/columns)
 193. [Not Started] Desktop screenshot regressietest.
 194. [Partial] Print CSS uitbreiden.
