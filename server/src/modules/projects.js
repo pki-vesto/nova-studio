@@ -6,6 +6,7 @@ const { upload, removeUpload } = require("./uploads");
 const { seedSampleProject } = require("./seed");
 const { stampOwnership, visibleProjectWhere } = require("./authorization");
 const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
+const { safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -56,6 +57,17 @@ function hydrateProject(row) {
 function scopedProject(req, projectId) {
   const scope = visibleProjectWhere(req, "p");
   return db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: projectId, ...scope.params });
+}
+
+function promoteProject(row) {
+  if (!row) return;
+  safePromote("project", row.id, row.title, {
+    title: row.title || "",
+    status: row.status || "",
+    client_id: row.client_id || "",
+    project_type: row.project_type || "",
+    style: row.style || ""
+  });
 }
 
 router.get("/", (req, res) => {
@@ -132,10 +144,12 @@ router.post("/", (req, res) => {
     db.prepare("INSERT INTO intake (project_id) VALUES (?)").run(projectId);
   });
   tx();
-  res.status(201).json(hydrateProject(db.prepare(`
+  const project = db.prepare(`
     SELECT p.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone
     FROM projects p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id = ?
-  `).get(projectId)));
+  `).get(projectId);
+  promoteProject(project);
+  res.status(201).json(hydrateProject(project));
 });
 
 router.get("/:id", (req, res) => {
@@ -185,7 +199,9 @@ router.put("/:id", (req, res) => {
     db.prepare(`UPDATE projects SET ${set.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = @id`).run(params);
   }
   const scope = visibleProjectWhere(req, "p");
-  res.json(hydrateProject(db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params })));
+  const project = db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params });
+  promoteProject(project);
+  res.json(hydrateProject(project));
 });
 
 // Cover/hero image for the editorial proposal + presentation.

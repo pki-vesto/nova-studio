@@ -27,6 +27,7 @@ app.use(express.json());
 app.use("/api/clients", require("./clients"));
 app.use("/api/projects", require("./projects"));
 app.use("/api/products", require("./products"));
+app.use("/api/intake", require("./intake"));
 app.use("/api/rooms", require("./rooms"));
 app.use("/api/materials", require("./materials"));
 app.use("/api/suppliers", require("./suppliers"));
@@ -44,6 +45,18 @@ const j = (path, method, body) => fetch(`${base}${path}`, {
   body: body ? JSON.stringify(body) : undefined
 });
 
+function pdfStructure(buffer) {
+  const text = buffer.toString("latin1");
+  return {
+    header: text.slice(0, 5),
+    pageCount: (text.match(/\/Type\s*\/Page\b/g) || []).length,
+    hasA4MediaBox: text.includes("/MediaBox [0 0 595.28 841.89]"),
+    fontRefs: (text.match(/\/Font\b/g) || []).length,
+    hasCatalog: text.includes("/Type /Catalog"),
+    hasTrailer: text.includes("%%EOF")
+  };
+}
+
 test("client aanmaken", async () => {
   const res = await j("/api/clients", "POST", { name: "Familie De Vries", email: "vries@example.nl" });
   assert.equal(res.status, 201);
@@ -60,6 +73,23 @@ test("project aanmaken met nieuwe klant en in lijst zichtbaar", async () => {
   assert.ok(project.intake, "intake row hydrated");
   const list = await (await j("/api/projects?status=")).json();
   assert.ok(list.some((p) => p.id === project.id), "project appears in list");
+});
+
+test("intake questionnaire is configurable", async () => {
+  const initial = await (await j("/api/intake/questionnaire")).json();
+  assert.ok(initial.some((q) => q.key === "wishes"), "default questions are seeded");
+
+  const next = initial.map((q) => q.key === "wishes"
+    ? { ...q, label: "Ontwerpvraag", placeholder: "Wat moet het ontwerp oplossen?", sort_order: 5, is_enabled: true }
+    : q);
+  const res = await j("/api/intake/questionnaire", "PUT", { questions: next });
+  assert.equal(res.status, 200);
+  const saved = await res.json();
+  const wishes = saved.find((q) => q.key === "wishes");
+  assert.equal(wishes.label, "Ontwerpvraag");
+  assert.equal(wishes.placeholder, "Wat moet het ontwerp oplossen?");
+  assert.equal(wishes.sort_order, 5);
+  assert.equal(wishes.is_enabled, true);
 });
 
 test("productselectie en shoppinglijst totaal", async () => {
@@ -99,6 +129,39 @@ test("list endpoints support opt-in limit offset pagination headers", async () =
   assert.ok(Number(pagedProductsRes.headers.get("x-total-count")) >= 3);
   assert.equal(pagedProductsRes.headers.get("x-limit"), "2");
   assert.equal(pagedProductsRes.headers.get("x-offset"), "1");
+});
+
+test("productcategorieen beheren en toepassen op producten", async () => {
+  const product = await (await j("/api/products", "POST", { name: "Categorie-bank", category: "Meubilair", price: 1000 })).json();
+
+  const initial = await (await j("/api/products/categories")).json();
+  const furniture = initial.find((c) => c.name === "Meubilair");
+  assert.ok(furniture, "product write seeds the managed category vocabulary");
+  assert.equal(furniture.product_count, 1);
+
+  const createdRes = await j("/api/products/categories", "POST", { name: "Verlichting" });
+  assert.equal(createdRes.status, 201);
+  const created = await createdRes.json();
+  assert.equal(created.name, "Verlichting");
+
+  const renamedRes = await j(`/api/products/categories/${furniture.id}`, "PUT", { name: "Zitmeubilair" });
+  assert.equal(renamedRes.status, 200);
+  assert.equal((await renamedRes.json()).name, "Zitmeubilair");
+  const renamedProduct = db.prepare("SELECT category FROM products WHERE id = ?").get(product.id);
+  assert.equal(renamedProduct.category, "Zitmeubilair", "renaming category updates linked products");
+
+  const duplicate = await j(`/api/products/categories/${created.id}`, "PUT", { name: "zitmeubilair" });
+  assert.equal(duplicate.status, 409);
+
+  const deleteLinkedRes = await j(`/api/products/categories/${furniture.id}`, "DELETE");
+  assert.equal(deleteLinkedRes.status, 204);
+  const clearedProduct = db.prepare("SELECT category FROM products WHERE id = ?").get(product.id);
+  assert.equal(clearedProduct.category, "", "deleting category clears linked product category");
+
+  const deleteRes = await j(`/api/products/categories/${created.id}`, "DELETE");
+  assert.equal(deleteRes.status, 204);
+  const afterDelete = await (await j("/api/products/categories")).json();
+  assert.equal(afterDelete.some((c) => c.id === created.id), false);
 });
 
 test("room finish schedule bundelt kleuren materialen en notities", async () => {
@@ -325,6 +388,42 @@ test("voorstel aanmaken, secties geseed en PDF-export", async () => {
   assert.ok(fs.statSync(onDisk).size > 500, "PDF is non-trivial");
 });
 
+test("proposal PDF visual smoke bewaakt documentstructuur", async () => {
+  const project = await (await j("/api/projects", "POST", {
+    title: "Visual Smoke Proposal",
+    clientName: "Familie Smoke",
+    address: "Rotterdam",
+    brief: "Warme basis met natuurlijke materialen"
+  })).json();
+  const room = await (await j("/api/rooms", "POST", { project_id: project.id, name: "Woonkamer", concept: "Rustig en tactiel" })).json();
+  const product = await (await j("/api/products", "POST", { name: "Linnen bank", brand: "Nova", price: 2400 })).json();
+  await j("/api/products/select", "POST", { project_id: project.id, room_id: room.id, product_id: product.id, quantity: 1 });
+  await j("/api/materials", "POST", { project_id: project.id, name: "Travertin", spec: "Gezoet", application: "Salontafel" });
+  const proposal = await (await j("/api/proposals", "POST", {
+    project_id: project.id,
+    title: "Visual Smoke Voorstel",
+    intro_text: "Een rustige basis met zichtbare materialen.",
+    style_direction: "Warm minimalisme",
+    color_advice: "Kalk, linnen en salie",
+    closing_text: "Na akkoord werken we planning en inkoop uit."
+  })).json();
+
+  const exportRes = await j(`/api/proposals/${proposal.id}/export-pdf?audience=client`, "POST");
+  assert.equal(exportRes.status, 200);
+  const out = await exportRes.json();
+  const onDisk = path.join(process.env.NOVA_EXPORT_DIR, path.basename(out.path));
+  const pdf = fs.readFileSync(onDisk);
+  const structure = pdfStructure(pdf);
+
+  assert.equal(structure.header, "%PDF-");
+  assert.ok(pdf.length > 2000, "visual smoke PDF has meaningful size");
+  assert.ok(structure.pageCount >= 2, "proposal has cover plus body pages");
+  assert.equal(structure.hasA4MediaBox, true, "proposal renders on A4 pages");
+  assert.ok(structure.fontRefs >= 1, "proposal has font resources");
+  assert.equal(structure.hasCatalog, true, "proposal has a PDF catalog");
+  assert.equal(structure.hasTrailer, true, "proposal has a complete trailer");
+});
+
 test("product price history capture en surface", async () => {
   const product = await (await j("/api/products", "POST", {
     name: "Eames Lounge", purchase_price: 10, sale_price: 25, price: 25
@@ -353,6 +452,33 @@ test("product price history capture en surface", async () => {
 
   const missing = await j("/api/products/product_does_not_exist/price-history");
   assert.equal(missing.status, 404);
+});
+
+test("product variant creation records initial price history", async () => {
+  const parent = await (await j("/api/products", "POST", {
+    name: "Variant Parent", purchase_price: 100, sale_price: 175, price: 175
+  })).json();
+
+  const variantRes = await j(`/api/products/${parent.id}/variants`, "POST", {
+    name: "Variant Parent - velvet",
+    purchase_price: 120,
+    sale_price: 210,
+    price: 210
+  });
+  assert.equal(variantRes.status, 201);
+  const variant = await variantRes.json();
+  assert.equal(variant.parent_product_id, parent.id);
+  assert.equal(variant.purchase_price, 120);
+  assert.equal(variant.sale_price, 210);
+  assert.equal(variant.margin, 90);
+
+  const history = await (await j(`/api/products/${variant.id}/price-history`)).json();
+  assert.equal(history.length, 1, "variant create appends an initial history row");
+  assert.equal(history[0].purchase_price, 120);
+  assert.equal(history[0].sale_price, 210);
+  assert.equal(history[0].price, 210);
+  assert.equal(history[0].margin, 90);
+  assert.equal(history[0].note, "variant_initial");
 });
 
 // Hex-encode an ASCII string the way PDFKit writes glyphs inside `<...>` TJ
