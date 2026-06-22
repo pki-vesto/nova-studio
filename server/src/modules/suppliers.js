@@ -5,6 +5,7 @@ const { id } = require("./utils");
 const { record } = require("./audit");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
+const { safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -77,6 +78,16 @@ function parseCsv(text) {
   return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 }
 
+function promoteSupplier(row) {
+  if (!row) return;
+  safePromote("supplier", row.id, row.name, {
+    name: row.name || "",
+    website: row.website || "",
+    category: row.category || "",
+    rating: Number(row.rating || 0)
+  });
+}
+
 // --- Suppliers --------------------------------------------------------------
 
 router.get("/", (_req, res) => {
@@ -110,7 +121,9 @@ router.post("/", validateBody(supplierSchema), (req, res) => {
     notes: req.body.notes || ""
   });
   record("supplier", supplierId, "create", req.body.name || "");
-  res.status(201).json(db.prepare("SELECT * FROM suppliers WHERE id = ?").get(supplierId));
+  const supplier = db.prepare("SELECT * FROM suppliers WHERE id = ?").get(supplierId);
+  promoteSupplier(supplier);
+  res.status(201).json(supplier);
 });
 
 router.get("/:id", (req, res) => {
@@ -154,7 +167,9 @@ router.put("/:id", validateBody(supplierSchema, { partial: true }), (req, res) =
     notes: req.body.notes ?? current.notes
   });
   record("supplier", req.params.id, "update");
-  res.json(db.prepare("SELECT * FROM suppliers WHERE id = ?").get(req.params.id));
+  const supplier = db.prepare("SELECT * FROM suppliers WHERE id = ?").get(req.params.id);
+  promoteSupplier(supplier);
+  res.json(supplier);
 });
 
 router.delete("/:id", (req, res) => {

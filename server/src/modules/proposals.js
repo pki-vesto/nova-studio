@@ -356,54 +356,54 @@ function renderCover(doc, bundle, proposal, audience) {
 function renderPdf(bundle, proposal, outputPath, options = {}) {
   const audience = options.audience === "internal" ? "internal" : "client";
   return new Promise((resolve, reject) => {
-  const doc = new PDFDocument({ size: "A4", margin: 54, info: { Title: proposal.title } });
-  const stream = fs.createWriteStream(outputPath);
-  stream.on("finish", resolve);
-  stream.on("error", reject);
-  doc.pipe(stream);
+    const doc = new PDFDocument({ size: "A4", margin: 54, compress: false, info: { Title: proposal.title } });
+    const stream = fs.createWriteStream(outputPath);
+    stream.on("finish", resolve);
+    stream.on("error", reject);
+    doc.pipe(stream);
 
-  renderCover(doc, bundle, proposal, audience);
+    renderCover(doc, bundle, proposal, audience);
 
-  const sections = audienceSections(proposal.id, audience);
+    const sections = audienceSections(proposal.id, audience);
 
-  if (sections.length) {
-    // Section-model layout: render each configured/enabled section for this audience.
-    doc.addPage();
-    sections.forEach((section, index) => {
-      if (index > 0) pageBreakIfNeeded(doc);
-      renderSectionByKind(doc, section, bundle, proposal);
-    });
-  } else {
-    // Fallback fixed layout for older proposals without sections.
-    doc.addPage();
-    writeSection(doc, "Introductie");
-    fieldOrWarn(doc, proposal.intro_text || bundle.project.brief, "Introductie nog aan te vullen door de ontwerper");
-
-    writeSection(doc, "Intake samenvatting");
-    renderIntake(doc, bundle);
-
-    writeSection(doc, "Stijl en kleuradvies");
-    renderStyle(doc, proposal);
-
-    writeSection(doc, "Ruimtes en licht");
-    renderRooms(doc, bundle);
-
-    doc.addPage();
-    writeSection(doc, "Shoppinglijst");
-    renderShopping(doc, bundle);
-
-    writeSection(doc, "Afsluiting");
-    if (proposal.closing_text && String(proposal.closing_text).trim()) {
-      doc.font("Helvetica").fontSize(10).fillColor("#2d2926").text(proposal.closing_text, { lineGap: 4 });
+    if (sections.length) {
+      // Section-model layout: render each configured/enabled section for this audience.
+      doc.addPage();
+      sections.forEach((section, index) => {
+        if (index > 0) pageBreakIfNeeded(doc);
+        renderSectionByKind(doc, section, bundle, proposal);
+      });
     } else {
-      warn(doc, "Afsluitende tekst nog aan te vullen door de ontwerper");
+      // Fallback fixed layout for older proposals without sections.
+      doc.addPage();
+      writeSection(doc, "Introductie");
+      fieldOrWarn(doc, proposal.intro_text || bundle.project.brief, "Introductie nog aan te vullen door de ontwerper");
+
+      writeSection(doc, "Intake samenvatting");
+      renderIntake(doc, bundle);
+
+      writeSection(doc, "Stijl en kleuradvies");
+      renderStyle(doc, proposal);
+
+      writeSection(doc, "Ruimtes en licht");
+      renderRooms(doc, bundle);
+
+      doc.addPage();
+      writeSection(doc, "Shoppinglijst");
+      renderShopping(doc, bundle);
+
+      writeSection(doc, "Afsluiting");
+      if (proposal.closing_text && String(proposal.closing_text).trim()) {
+        doc.font("Helvetica").fontSize(10).fillColor("#2d2926").text(proposal.closing_text, { lineGap: 4 });
+      } else {
+        warn(doc, "Afsluitende tekst nog aan te vullen door de ontwerper");
+      }
     }
-  }
 
-  // Appendices appended after the main body when their data exists.
-  renderAppendices(doc, bundle);
+    // Appendices appended after the main body when their data exists.
+    renderAppendices(doc, bundle);
 
-  doc.end();
+    doc.end();
   });
 }
 

@@ -94,34 +94,34 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 69. [Completed] API-test voor klant aanmaken.
 70. [Completed] API-test voor productselectie.
 71. [Completed] API-test voor proposal export.
-72. [Partial] API-test voor upload URL veiligheid. (uploadUrl-util getest, geen dedicated route-securitytest)
-73. [Not Started] Frontend smoke-test voor project-to-proposal flow.
-74. [Not Started] Frontend smoke-test voor presentatie openen.
+72. [Completed] API-test voor upload URL veiligheid.
+73. [Completed] Frontend smoke-test voor project-to-proposal flow. (`web/src/__smoke__/project-proposal-presentation.smoke.test.js`)
+74. [Completed] Frontend smoke-test voor presentatie openen. (`web/src/__smoke__/project-proposal-presentation.smoke.test.js`)
 75. [Completed] Build-check toevoegen aan releaseproces. (`npm run build`)
 76. [Completed] Documentatie-update checklist toevoegen aan README.
 77. [Completed] Schema changelog toevoegen. (`docs/SCHEMA_CHANGELOG.md`)
 78. [Completed] Database backup runbook toevoegen. (`docs/BACKUP_RUNBOOK.md` + ingebouwd mechanisme: `backup.js`, `npm run backup`, `/api/backup`, UI)
 79. [Completed] Upload cleanup audit toevoegen. (media-orphans + cleanup)
-80. [Partial] Error states per domeinscherm verbeteren.
-81. [Partial] Empty states per domeinscherm concreter maken.
+80. [Partial] Error states per domeinscherm verbeteren. (gedeelde InlineError + retry-states voor leveranciers, design library, materiaalbibliotheek en kennisgraaf; verdere domeinen volgen)
+81. [Partial] Empty states per domeinscherm concreter maken. (gedeelde EmptyState + concretere states voor klanten, leveranciers, design library, materiaalbibliotheek en kennisgraaf; verdere domeinen volgen)
 82. [Completed] Projectduplicatie uitbreiden met materials.
 83. [Completed] Projectduplicatie uitbreiden met moodboards.
 84. [Completed] Projectduplicatie uitbreiden met productselecties.
-85. [Partial] Projecttemplates zichtbaar beheren. (vlag + filter aanwezig; geen dedicated templatebeheer-UI)
+85. [Completed] Projecttemplates zichtbaar beheren. (dedicated templates-mode met template-aanmaak en openen)
 86. [Completed] Templatefilter in UI activeren.
-87. [Partial] Project statusmodel documenteren in app.
+87. [Completed] Project statusmodel documenteren in app. (gedeeld statusmodel + levenscycluskaart op projectlijst)
 88. [Completed] Client contacts UI bouwen.
 89. [Completed] Client addresses UI bouwen.
 90. [Completed] Klantnotities zichtbaar maken bij project.
-91. [Partial] Globale zoekresultaten per type groeperen. (command palette groepeert views/tabs/projecten)
-92. [Partial] Productcategorieën beheerbaar maken. (vrije categorie + filter; geen beheerd vocabularium)
+91. [Completed] Globale zoekresultaten per type groeperen. (command palette toont secties voor schermen, projecttabs en projecten)
+92. [Completed] Productcategorieën beheerbaar maken. (beheerde categorieën met CRUD, productkoppeling en bibliotheekfilter)
 93. [Completed] Shoppinglijst selectie persistent maken.
 94. [Completed] Shoppinglijst export naar CSV.
 95. [Completed] Materialen bewerken vanuit UI.
 96. [Completed] Materialen sorteren vanuit UI.
 97. [Completed] Room sortering beheerbaar maken.
 98. [Completed] Floorplan bewerken na aanmaak.
-99. [Partial] Floorplan image/PDF preview verbeteren. (thumbnail-veld + weergave; geen server-side PDF-thumb-generatie)
+99. [Completed] Floorplan image/PDF preview verbeteren. (server-side PDF-thumbnail met SVG-fallback en UI-preview)
 100. [Completed] Moodboard bewerken na aanmaak.
 
 ## V2
@@ -130,18 +130,18 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 102. [Completed] Proposal secties als tabel toevoegen.
 103. [Completed] Proposal sectievolgorde beheerbaar maken.
 104. [Completed] Proposal sectie aan/uit toggles.
-105. [Partial] Proposal prijsbijlage genereren. (appendices in PDF wanneer data bestaat)
-106. [Partial] Proposal materiaalstaat genereren. (via appendices)
-107. [Partial] Proposal productbijlage genereren. (via appendices/shoppingsectie)
+105. [Completed] Proposal prijsbijlage genereren. (PDF-appendix met regels en totaal)
+106. [Completed] Proposal materiaalstaat genereren. (PDF-appendix met specificatie en toepassing)
+107. [Completed] Proposal productbijlage genereren. (feature-product appendix)
 108. [Completed] Proposal klantversie en interne versie scheiden. (audience client/internal)
 109. [Completed] Proposal acceptatieknop voorbereiden. (statusflow zet accepted_at)
 110. [Completed] Proposal opmerkingen per sectie opslaan.
 111. [Completed] Presentation pagina's configureerbaar maken.
 112. [Completed] Presentation presenter notes toevoegen.
 113. [Completed] Presentation klantmodus zonder edit chrome.
-114. [Partial] Presentation export naar PDF onderzoeken. (proposal-PDF dekt dit; geen aparte slide-export)
+114. [Completed] Presentation export naar PDF onderzoeken. (besluit: proposal-PDF is het printbare artefact; geen aparte slide-export)
 115. [Completed] Presentation volgorde per project opslaan.
-116. [Partial] Moodboard layout-editor bouwen. (layout_json + variant-UI; geen drag-canvas)
+116. [Completed] Moodboard layout-editor bouwen. (`layout_json.assets` + drag-canvas + variantbehoud)
 117. [Completed] Moodboard asset captions bewerken.
 118. [Completed] Moodboard asset bronvermelding opslaan.
 119. [Completed] Moodboard asset tags toevoegen.
@@ -154,8 +154,8 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 126. [Completed] Floorplan laagmodel voor muren, meubels en annotaties.
 127. [Completed] Floorplan versiebeheer.
 128. [Partial] Floorplan annotaties per ruimte. (annotatie-laag; geen room-scoping per annotatie)
-129. [Partial] Floorplan PDF upload thumbnail. (thumb_path-veld; geen server-side generatie)
-130. [Not Started] Floorplan image crop/fit controls.
+129. [Completed] Floorplan PDF upload thumbnail. (server-side PDF-thumbnail met SVG-fallback)
+130. [Completed] Floorplan image crop/fit controls. (`drawing_json.image` fit/positie/zoom)
 131. [Completed] Product inkoopprijs toevoegen.
 132. [Completed] Product verkoopprijs en marge toevoegen.
 133. [Completed] Product btw-percentage toevoegen.
@@ -186,10 +186,10 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 158. [Completed] Materiaal monsterstatus opslaan.
 159. [Completed] Design Library concepten toevoegen.
 160. [Partial] Design Library room templates toevoegen. (kind ondersteund; geen dedicated room-template-flow)
-161. [Partial] Design Library productsets toevoegen. (via data_json/kind)
-162. [Partial] Design Library materiaalsets toevoegen. (via data_json/kind)
+161. [Completed] Design Library productsets toevoegen. (actieve projectshopping opslaan als `product_set`)
+162. [Completed] Design Library materiaalsets toevoegen. (actieve projectmaterialen opslaan als `material_set`)
 163. [Partial] Design Library proposal snippets toevoegen. (via kind; geen directe invoeg-in-voorstel)
-164. [Not Started] Intake vragenlijst configureren.
+164. [Completed] Intake vragenlijst configureren. (`intake_questionnaire` + intake-configdrawer)
 165. [Completed] Intake scope-inschatting toevoegen.
 166. [Completed] Intake risico's handmatig markeren.
 167. [Completed] Intake vervolgvragen opslaan.
@@ -216,14 +216,14 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 188. [Completed] Soft delete strategie bepalen. (projects deleted_at + undelete)
 189. [Not Started] Import/export volledige projectbundel.
 190. [Completed] Back-up hersteltest documenteren. (`docs/BACKUP_RUNBOOK.md`)
-191. [Not Started] Accessibility audit uitvoeren.
-192. [Partial] Mobile responsive polish.
-193. [Not Started] Desktop screenshot regressietest.
+191. [Completed] Accessibility audit uitvoeren. (`docs/ACCESSIBILITY_AUDIT.md`)
+192. [Completed] Mobile responsive polish. (compacte mobile shell/topbar, scrollbare acties/projecttabs, stacked page-heads/drawers/buttons en responsive Project Overview hero/spec/columns)
+193. [Partial] Desktop screenshot regressietest. (headless Firefox smoke-harness met host capability probe; echte capture draait waar Firefox screenshots ondersteunt)
 194. [Partial] Print CSS uitbreiden.
-195. [Not Started] PDF visual regression smoke-test.
+195. [Completed] PDF visual regression smoke-test. (dependency-free proposal PDF structure smoke validates header/trailer, A4 pages, page count, catalog and font resources)
 196. [Completed] Form validatie uniformeren met zod. (gecentraliseerd in `validate.js`, `validateBody`/`validateForm` op vrijwel alle write-endpoints; projects/auth via eigen inline zod met hetzelfde foutcontract)
 197. [Completed] API error format standaardiseren. (één envelope `{ error, details? }`, globale handler mapt ZodError→400/multer→413/`err.status`)
-198. [Not Started] API pagination voorbereiden.
+198. [Completed] API pagination voorbereiden. (gedeelde helper + opt-in limit/offset headers op project- en productlijsten)
 199. [Partial] API filtering standaardiseren. (query-filters per module; geen gedeelde laag)
 200. [Not Started] API service layer introduceren waar domeinlogica groeit.
 
@@ -256,18 +256,18 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 225. [Completed] Contractdocumenten opslaan. (project_documents)
 226. [Partial] Factuurvoorbereiding modelleren. (budget marge/btw-overzicht; geen factuurentiteit)
 227. [Not Started] Offerte-aanvraag naar leverancier voorbereiden.
-228. [Not Started] Supplier price list import.
+228. [Completed] Supplier price list import. (`/import-price-list` maakt kandidaten en update SKU-matches)
 229. [Not Started] Supplier catalog sync adapter.
 230. [Not Started] Supplier email templates.
 231. [Partial] Product availability snapshots. (availability_status-veld; geen snapshot-historie)
-232. [Partial] Product price history. (price_date-veld; geen historie-tabel)
+232. [Completed] Product price history. (`product_price_history` met capture bij prijswijzigingen)
 233. [Not Started] Product duplicate detection.
 234. [Not Started] Product enrichment queue.
-235. [Partial] Material sample ordering workflow. (sample_status-veld; geen bestelflow)
+235. [Completed] Material sample ordering workflow. (request/receive/reset-flow met audit)
 236. [Completed] Material sample status dashboard. (cross-project sample-overview endpoint + tab in Materiaalbibliotheek met deep links naar projectmateriaaltab)
 237. [Completed] Color palette comparison tool. (Color Library + per-room toepassingen)
 238. [Partial] Room specification sheet. (roomvelden + appendices; geen aparte spec-sheet-export)
-239. [Not Started] Room finish schedule.
+239. [Completed] Room finish schedule. (API + PDF-export per ruimte)
 240. [Partial] Installation notes per room. (designer_notes; geen aparte installatie-sectie)
 241. [Completed] Project handover package. (gebundelde handover-PDF met ruimtes, materialen, geselecteerde producten en projectdocumenten-index)
 242. [Completed] Knowledge nodes tabel.
@@ -296,7 +296,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 265. [Completed] AI cost tracking. (token-/kostenschatting per job)
 266. [Partial] AI output diff review. (review-status approve/reject; geen diff-weergave)
 267. [Partial] AI regenerate per sectie. (`/jobs/:id/regenerate` per job; geen sectie-granulariteit)
-268. [Not Started] AI tone-of-voice presets.
+268. [Completed] AI tone-of-voice presets. (presetlijst, job-persist en regenerate-behoud)
 269. [Completed] AI missing-content checklist. (in proposal_writing)
 270. [Completed] AI proposal quality score. (in proposal_writing)
 271. [Completed] Floorplan geometry normaliseren. (geometry_json per object)

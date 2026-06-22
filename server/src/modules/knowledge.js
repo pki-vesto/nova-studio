@@ -3,6 +3,7 @@ const { db } = require("../db/database");
 const { id, parseJson } = require("./utils");
 const { record } = require("./audit");
 const { validateBody, z } = require("./validate");
+const { promoteEntity } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -233,30 +234,12 @@ router.get("/path", (req, res) => {
 // ---- Promote (upsert from a domain entity) --------------------------------
 
 router.post("/promote", validateBody(promoteSchema), (req, res) => {
-  const type = req.body.type || "concept";
-  const refId = req.body.ref_id || "";
-  const label = req.body.label || "Naamloos";
-  const data = req.body.data ?? {};
-  const dataJson = JSON.stringify(typeof data === "string" ? parseJson(data, {}) : data);
-
-  const existing = refId
-    ? db.prepare("SELECT * FROM knowledge_nodes WHERE type = ? AND ref_id = ?").get(type, refId)
-    : null;
-
-  if (existing) {
-    db.prepare("UPDATE knowledge_nodes SET label = ?, data_json = ? WHERE id = ?")
-      .run(label, dataJson, existing.id);
-    record("knowledge_node", existing.id, "promote_update", label);
-    return res.json(hydrate(db.prepare("SELECT * FROM knowledge_nodes WHERE id = ?").get(existing.id)));
-  }
-
-  const nodeId = id("knode");
-  db.prepare(`
-    INSERT INTO knowledge_nodes (id, type, label, ref_id, data_json)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(nodeId, type, label, refId, dataJson);
-  record("knowledge_node", nodeId, "promote_create", label);
-  res.json(hydrate(db.prepare("SELECT * FROM knowledge_nodes WHERE id = ?").get(nodeId)));
+  res.json(promoteEntity(
+    req.body.type || "concept",
+    req.body.ref_id || "",
+    req.body.label || "Naamloos",
+    req.body.data ?? {}
+  ));
 });
 
 module.exports = router;
