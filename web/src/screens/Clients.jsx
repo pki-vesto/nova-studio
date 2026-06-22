@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
-import { Kicker, statusLabel } from "../components/primitives.jsx";
+import { EmptyState, Kicker, statusLabel } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
 function ClientDrawer({ ctx, client, onClose }) {
@@ -147,7 +147,11 @@ export function Clients({ ctx }) {
       </div>
 
       {clients.length === 0 ? (
-        <div className="empty"><p className="body" style={{ margin: 0 }}>Nog geen klanten. Voeg er één toe of maak een project aan met een nieuwe klant.</p></div>
+        <EmptyState
+          title="Nog geen klanten"
+          body="Voeg een relatie toe of maak een project aan met een nieuwe klant. Contactpersonen, adressen en projectgeschiedenis verschijnen hier."
+          action={<button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Eerste klant</button>}
+        />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 40, alignItems: "start" }}>
           <div className="col gap2">
@@ -157,6 +161,13 @@ export function Clients({ ctx }) {
                 <span className="caption">{c.project_count || 0} proj.</span>
               </div>
             ))}
+            {list.length === 0 && (
+              <EmptyState
+                title="Geen klanten gevonden"
+                body="Geen relatie past bij deze zoekterm. Zoek op klantnaam of bedrijfsnaam om de lijst te verkleinen."
+                compact
+              />
+            )}
           </div>
 
           {selected ? (
@@ -245,7 +256,10 @@ export function Clients({ ctx }) {
               ) : <p className="caption">Nog geen projecten voor deze klant.</p>}
             </div>
           ) : (
-            <div className="empty"><p className="body" style={{ margin: 0 }}>Selecteer een klant om gegevens en projectgeschiedenis te bekijken.</p></div>
+            <EmptyState
+              title="Selecteer een klant"
+              body="Kies links een relatie om contactpersonen, adressen en gekoppelde projecten te bekijken."
+            />
           )}
         </div>
       )}

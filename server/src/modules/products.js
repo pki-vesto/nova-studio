@@ -4,6 +4,8 @@ const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
 const { record } = require("./audit");
+const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
+const { safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -75,11 +77,32 @@ const importCsvSchema = z.object({
   csv: z.string().optional()
 });
 
+const categorySchema = z.object({
+  name: z.string().trim().min(1)
+});
+
 // margin = sale_price - purchase_price, but only when both are > 0.
 function computeMargin(salePrice, purchasePrice) {
   const sale = Number(salePrice || 0);
   const purchase = Number(purchasePrice || 0);
   return (sale > 0 && purchase > 0) ? sale - purchase : 0;
+}
+
+function ensureProductCategory(name) {
+  const clean = String(name || "").trim();
+  if (!clean) return null;
+  db.prepare("INSERT OR IGNORE INTO product_categories (id, name) VALUES (?, ?)")
+    .run(id("category"), clean);
+  return db.prepare("SELECT * FROM product_categories WHERE lower(name) = lower(?)").get(clean);
+}
+
+function syncProductCategoriesFromProducts() {
+  db.prepare(`
+    INSERT OR IGNORE INTO product_categories (id, name)
+    SELECT 'category_' || lower(hex(randomblob(8))), trim(category)
+      FROM products
+     WHERE trim(COALESCE(category, '')) <> ''
+  `).run();
 }
 
 // Append a row to product_price_history. Wrapped so a failure here can never
@@ -96,6 +119,21 @@ function recordPriceHistory(productId, prices, note) {
   } catch {
     // Never break the primary write.
   }
+}
+
+function promoteProduct(row) {
+  if (!row) return;
+  safePromote("product", row.id, row.name, {
+    name: row.name || "",
+    brand: row.brand || "",
+    supplier: row.supplier || "",
+    supplier_id: row.supplier_id || "",
+    category: row.category || "",
+    collection: row.collection || "",
+    sku: row.sku || "",
+    status: row.status || "",
+    availability_status: row.availability_status || ""
+  });
 }
 
 // Quote a single CSV cell: wrap in quotes and double inner quotes when it
@@ -145,14 +183,62 @@ function parseCsv(text) {
   return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 }
 
-router.get("/", (_req, res) => {
+router.get("/", (req, res) => {
+  const paged = hasPagination(req.query);
+  const page = parsePagination(req.query);
+  if (paged) {
+    const total = db.prepare("SELECT COUNT(*) AS total FROM products").get().total;
+    setPaginationHeaders(res, { total, ...page });
+  }
   res.json(db.prepare(`
     SELECT p.*, alt.name AS alternative_to_name,
       EXISTS(SELECT 1 FROM product_favorites f WHERE f.product_id = p.id) AS is_favorite
     FROM products p
     LEFT JOIN products alt ON alt.id = p.alternative_to_id
     ORDER BY p.updated_at DESC, p.name
+    ${paginationSql(paged)}
+  `).all(page));
+});
+
+// --- Managed categories ------------------------------------------------------
+router.get("/categories", (_req, res) => {
+  syncProductCategoriesFromProducts();
+  res.json(db.prepare(`
+    SELECT c.*, COUNT(p.id) AS product_count
+      FROM product_categories c
+      LEFT JOIN products p ON lower(p.category) = lower(c.name)
+     GROUP BY c.id
+     ORDER BY c.sort_order, c.name COLLATE NOCASE
   `).all());
+});
+
+router.post("/categories", validateBody(categorySchema), (req, res) => {
+  const category = ensureProductCategory(req.body.name);
+  res.status(201).json(category);
+});
+
+router.put("/categories/:id", validateBody(categorySchema), (req, res) => {
+  const current = db.prepare("SELECT * FROM product_categories WHERE id = ?").get(req.params.id);
+  if (!current) return res.status(404).json({ error: "Categorie niet gevonden" });
+  const duplicate = db.prepare("SELECT id FROM product_categories WHERE lower(name) = lower(?) AND id <> ?").get(req.body.name, req.params.id);
+  if (duplicate) return res.status(409).json({ error: "Categorie bestaat al" });
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE products SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE lower(category) = lower(?)").run(req.body.name, current.name);
+    db.prepare("UPDATE product_categories SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.body.name, req.params.id);
+  });
+  tx();
+  res.json(db.prepare("SELECT * FROM product_categories WHERE id = ?").get(req.params.id));
+});
+
+router.delete("/categories/:id", (req, res) => {
+  const current = db.prepare("SELECT * FROM product_categories WHERE id = ?").get(req.params.id);
+  if (!current) return res.status(404).json({ error: "Categorie niet gevonden" });
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE products SET category = '', updated_at = CURRENT_TIMESTAMP WHERE lower(category) = lower(?)").run(current.name);
+    db.prepare("DELETE FROM product_categories WHERE id = ?").run(req.params.id);
+  });
+  tx();
+  res.status(204).end();
 });
 
 router.post("/", upload.single("image"), validateForm(productSchema), (req, res) => {
@@ -190,12 +276,15 @@ router.post("/", upload.single("image"), validateForm(productSchema), (req, res)
     availability_status: req.body.availability_status || "unknown",
     price_date: req.body.price_date || ""
   });
+  ensureProductCategory(req.body.category);
   recordPriceHistory(productId, {
     purchase_price: purchasePrice,
     sale_price: salePrice,
     price: Number(req.body.price || 0)
   }, "initial");
-  res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(productId));
+  const product = db.prepare("SELECT * FROM products WHERE id = ?").get(productId);
+  promoteProduct(product);
+  res.status(201).json(product);
 });
 
 router.put("/:id", upload.single("image"), validateForm(productSchema, { partial: true }), (req, res) => {
@@ -265,6 +354,7 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
     availability_status: req.body.availability_status ?? current.availability_status ?? "unknown",
     price_date: req.body.price_date ?? current.price_date ?? ""
   });
+  ensureProductCategory(req.body.category ?? current.category);
   if (req.file && current.image_path && current.image_path !== req.file.path) {
     removeUpload(current.image_path);
   }
@@ -283,7 +373,9 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
       to: { purchase_price: purchasePrice, sale_price: salePrice, price: newPrice }
     }));
   }
-  res.json(db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id));
+  const product = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+  promoteProduct(product);
+  res.json(product);
 });
 
 router.delete("/:id", (req, res) => {
@@ -321,6 +413,7 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
   const variantId = id("product");
   const salePrice = Number(req.body.sale_price || 0);
   const purchasePrice = Number(req.body.purchase_price || 0);
+  const catalogPrice = Number(req.body.price || 0);
   db.prepare(`
     INSERT INTO products (id, name, brand, supplier, category, collection, sku, dimensions, lead_time, designer, alternative_to_id, image_path, price, webshop_url, description, notes, tags, status, supplier_id, parent_product_id, purchase_price, sale_price, margin, vat_rate, availability_status, price_date)
     VALUES (@id, @name, @brand, @supplier, @category, @collection, @sku, @dimensions, @lead_time, @designer, @alternative_to_id, @image_path, @price, @webshop_url, @description, @notes, @tags, @status, @supplier_id, @parent_product_id, @purchase_price, @sale_price, @margin, @vat_rate, @availability_status, @price_date)
@@ -337,7 +430,7 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
     designer: req.body.designer || "",
     alternative_to_id: req.body.alternative_to_id || null,
     image_path: req.file?.path || "",
-    price: Number(req.body.price || 0),
+    price: catalogPrice,
     webshop_url: req.body.webshop_url || "",
     description: req.body.description || "",
     notes: req.body.notes || "",
@@ -352,6 +445,12 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
     availability_status: req.body.availability_status || "unknown",
     price_date: req.body.price_date || ""
   });
+  recordPriceHistory(variantId, {
+    purchase_price: purchasePrice,
+    sale_price: salePrice,
+    price: catalogPrice
+  }, "variant_initial");
+  ensureProductCategory(req.body.category ?? parent.category);
   res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(variantId));
 });
 
@@ -446,12 +545,13 @@ router.post("/import-csv", upload.single("file"), validateForm(importCsvSchema),
       const salePrice = Number(cell(row, "sale_price") || 0) || 0;
       const purchasePrice = Number(cell(row, "purchase_price") || 0) || 0;
       const vatRaw = cell(row, "vat_rate");
+      const category = String(cell(row, "category") || "").trim();
       insert.run({
         id: id("product"),
         name,
         brand: String(cell(row, "brand") || "").trim(),
         supplier: String(cell(row, "supplier") || "").trim(),
-        category: String(cell(row, "category") || "").trim(),
+        category,
         sku: String(cell(row, "sku") || "").trim(),
         price: Number(cell(row, "price") || 0) || 0,
         purchase_price: purchasePrice,
@@ -461,6 +561,7 @@ router.post("/import-csv", upload.single("file"), validateForm(importCsvSchema),
         availability_status: String(cell(row, "availability_status") || "").trim() || "unknown",
         status: "candidate"
       });
+      ensureProductCategory(category);
       created += 1;
     }
   });
