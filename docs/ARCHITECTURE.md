@@ -71,13 +71,13 @@ API's: `GET/POST /api/clients`, `GET/PUT/DELETE /api/clients/:id`, `POST /api/cl
 
 ### Projects
 
-Verantwoordelijkheden: projectdossier, status, klantkoppeling, editorial metadata, budgetregels, palet, hero image, archiveren, herstellen, **soft-delete** (`deleted_at` + `/undelete`), **optimistic concurrency** (`row_version`, 409 bij conflict), **volledige duplicatie** (project + intake + rooms met id-remap + materials + moodboards/assets + selecties) en sample seed.
+Verantwoordelijkheden: projectdossier, status, klantkoppeling, editorial metadata, budgetregels, palet, hero image, archiveren, herstellen, **soft-delete** (`deleted_at` + `/undelete`), **optimistic concurrency** (`row_version`, 409 bij conflict), **volledige duplicatie** (project + intake + rooms met id-remap + materials + moodboards/assets + selecties), **projectbundel import/export** (JSON met project, klant, intake, rooms, materials, floorplans/objecten, moodboards/assets, selecties/product-snapshots, voorstellen/secties/comments en planning/documenten) en sample seed.
 
 Datamodellen: `projects` (incl. `studio_id`/`owner_id`/`deleted_at`/`row_version`, editorial velden, `goals_json`/`principles_json`/`palette_json`/`budget_lines_json`, `is_template`/`template_name`), plus gehydrateerde child-data.
 
 Services: `server/src/modules/projects.js`, `server/src/modules/seed.js`, `web/src/screens/ProjectsIndex.jsx`, `web/src/screens/ProjectOverview.jsx`.
 
-API's: `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `POST /api/projects/:id/hero`, `POST /api/projects/:id/archive`, `POST /api/projects/:id/restore`, `POST /api/projects/:id/undelete`, `POST /api/projects/:id/duplicate`, `POST /api/projects/seed-sample`. Validatie via eigen inline zod-schema.
+API's: `GET/POST /api/projects`, `GET/PUT /api/projects/:id`, `GET /api/projects/:id/export.json`, `POST /api/projects/import`, `POST /api/projects/:id/hero`, `POST /api/projects/:id/archive`, `POST /api/projects/:id/restore`, `POST /api/projects/:id/undelete`, `POST /api/projects/:id/duplicate`, `POST /api/projects/seed-sample`. Validatie via eigen inline zod-schema.
 
 ### Intake
 

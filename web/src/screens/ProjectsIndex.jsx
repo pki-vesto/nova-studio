@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
 import { Ph, Kicker, PROJECT_STATUS_MODEL, StatusDot } from "../components/primitives.jsx";
@@ -64,6 +64,8 @@ export function ProjectsIndex({ ctx }) {
   const [creating, setCreating] = useState(false);
   const [creatingTemplate, setCreatingTemplate] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInput = useRef(null);
   const [templates, setTemplates] = useState([]);
 
   async function loadTemplates() {
@@ -89,6 +91,23 @@ export function ProjectsIndex({ ctx }) {
     } catch (err) { fail(err); setSeeding(false); }
   }
 
+  async function importBundle(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const bundle = JSON.parse(await file.text());
+      const imported = await api.json("/api/projects/import", "POST", bundle);
+      await loadProjectList();
+      await openProject(imported.id);
+    } catch (err) {
+      fail(err);
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  }
+
   return (
     <div className="content rise">
       <div className="page-head">
@@ -97,8 +116,12 @@ export function ProjectsIndex({ ctx }) {
           <h1 className="page-title">Projecten</h1>
         </div>
         <div className="row gap2 wrap">
+          <button className="btn btn-ghost btn-lg" onClick={() => importInput.current?.click()} disabled={importing}>
+            <Icon name="upload" size={16} /> {importing ? "Importeren..." : "Importeer bundel"}
+          </button>
           <button className="btn btn-ghost btn-lg" onClick={() => setCreatingTemplate(true)}><Icon name="library" size={16} /> Nieuw template</button>
           <button className="btn btn-primary btn-lg" onClick={() => setCreating(true)}><Icon name="plus" size={16} /> Nieuw project</button>
+          <input ref={importInput} type="file" accept="application/json,.json" onChange={importBundle} style={{ display: "none" }} />
         </div>
       </div>
 
@@ -125,6 +148,9 @@ export function ProjectsIndex({ ctx }) {
             ) : (
               <>
                 <button className="btn btn-primary btn-lg" onClick={() => setCreating(true)}><Icon name="plus" size={16} /> Nieuw project</button>
+                <button className="btn btn-ghost btn-lg" onClick={() => importInput.current?.click()} disabled={importing}>
+                  <Icon name="upload" size={16} /> {importing ? "Importeren..." : "Importeer bundel"}
+                </button>
                 <button className="btn btn-ghost btn-lg" onClick={loadSample} disabled={seeding}>{seeding ? "Bezig…" : "Laad voorbeeldproject"}</button>
               </>
             )}
