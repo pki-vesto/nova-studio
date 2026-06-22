@@ -79,6 +79,16 @@ function migrate() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS intake_questionnaire (
+      key TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      placeholder TEXT DEFAULT '',
+      input_type TEXT NOT NULL DEFAULT 'textarea',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS rooms (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -398,6 +408,17 @@ function migrate() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Managed product category vocabulary. Products still store the display
+    -- category string for backwards compatibility; this table gives the UI a
+    -- durable vocabulary to manage.
+    CREATE TABLE IF NOT EXISTS product_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     -- Moodboard client feedback.
     CREATE TABLE IF NOT EXISTS moodboard_feedback (
       id TEXT PRIMARY KEY,
@@ -650,6 +671,7 @@ function migrate() {
   addColumn("intake", "scope_estimate", "TEXT DEFAULT ''");
   addColumn("intake", "risks_json", "TEXT NOT NULL DEFAULT '[]'");
   addColumn("intake", "followups_json", "TEXT NOT NULL DEFAULT '[]'");
+  addColumn("intake_questionnaire", "updated_at", "TEXT NOT NULL DEFAULT ''");
 
   addColumn("notifications", "read_at", "TEXT DEFAULT ''");
   addColumn("notifications", "ref_type", "TEXT DEFAULT ''");
@@ -669,6 +691,26 @@ function migrate() {
   }
   // Default AI settings row (disabled until a provider is configured).
   db.prepare("INSERT OR IGNORE INTO ai_settings (id, enabled) VALUES (1, 0)").run();
+
+  const intakeQuestions = [
+    ["household", "Huishouden", "Stel met twee jonge kinderen", "input", 10],
+    ["room_use", "Gebruik van ruimtes", "Open keuken, werkhoek, logeerkamer", "input", 20],
+    ["wishes", "Wensen", "Wat wil de opdrachtgever bereiken?", "textarea", 30],
+    ["style_preferences", "Stijlvoorkeuren", "Warm minimalisme, natuurlijke materialen", "input", 40],
+    ["color_preferences", "Kleurvoorkeuren", "Aardetinten, gebroken wit", "input", 50],
+    ["budget_indication", "Budgetindicatie", "€ 25.000 – € 35.000", "input", 60],
+    ["existing_furniture", "Bestaand meubilair", "Eettafel en boekenkast blijven", "input", 70],
+    ["constraints", "Randvoorwaarden", "Huurwoning, geen ingrepen aan vaste kast, deadline najaar", "textarea", 80],
+    ["free_notes", "Vrije notities", "Overige observaties uit het gesprek", "textarea", 90],
+    ["scope_estimate", "Scope-inschatting", "Omvang van het advies en de verwachte werkzaamheden", "textarea", 100],
+    ["risks", "Risico's", "Levertijd maatwerk onzeker\\nVloer mogelijk niet egaal", "list", 110],
+    ["followups", "Vervolgvragen", "Exacte maten trapgat opvragen\\nVoorkeur verlichting bevestigen", "list", 120]
+  ];
+  const insertQuestion = db.prepare(`
+    INSERT OR IGNORE INTO intake_questionnaire (key, label, placeholder, input_type, sort_order, is_enabled)
+    VALUES (?, ?, ?, ?, ?, 1)
+  `);
+  intakeQuestions.forEach((question) => insertQuestion.run(...question));
 
   // Register this expansion step.
   db.prepare("INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)").run("2026-06-09-platform-expansion");
