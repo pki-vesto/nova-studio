@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
-import { Kicker, SectionHead } from "../components/primitives.jsx";
+import { EmptyState, InlineError, Kicker, SectionHead } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
 // Stable palette keyed by node type. Falls back to a neutral tone.
@@ -98,14 +98,20 @@ export function KnowledgeScreen({ ctx }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [path, setPath] = useState(undefined); // undefined = not run, [] = no path
+  const [loadError, setLoadError] = useState("");
   const [drawer, setDrawer] = useState(null); // null | "node" | "edge"
 
   const load = useCallback(async () => {
+    setLoadError("");
     try {
       const g = await api.get("/api/knowledge/graph");
       setNodes(g.nodes || []);
       setEdges(g.edges || []);
-    } catch (err) { fail(err); }
+    } catch (err) {
+      const message = err?.message || String(err);
+      setLoadError(message);
+      fail(err);
+    }
   }, [fail]);
 
   useEffect(() => { load(); }, [load]);
@@ -163,11 +169,18 @@ export function KnowledgeScreen({ ctx }) {
         </div>
       </div>
 
-      {nodes.length === 0 ? (
-        <div className="empty">
-          <p className="body" style={{ margin: 0 }}>Nog geen kennis in kaart. Voeg knopen toe — merken, stijlen, materialen — en verbind ze met relaties om de graaf te laten groeien.</p>
-          <button className="btn btn-clay" onClick={() => setDrawer("node")}><Icon name="plus" size={15} /> Eerste knoop</button>
-        </div>
+      {loadError ? (
+        <InlineError
+          title="Kennisgraaf kon niet worden geladen"
+          body={loadError}
+          action={<button className="btn btn-ghost" onClick={load}>Opnieuw proberen</button>}
+        />
+      ) : nodes.length === 0 ? (
+        <EmptyState
+          title="Nog geen kennis in kaart"
+          body="Voeg knopen toe voor merken, stijlen en materialen. Verbind ze daarna met relaties om de graaf bruikbaar te maken."
+          action={<button className="btn btn-clay" onClick={() => setDrawer("node")}><Icon name="plus" size={15} /> Eerste knoop</button>}
+        />
       ) : (
         <>
           {/* Search */}
