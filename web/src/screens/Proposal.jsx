@@ -9,7 +9,7 @@ import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
 function DocPage({ children, label, n, dark }) {
   return (
-    <section style={{ background: dark ? "var(--surface-ink)" : "var(--surface)", color: dark ? "var(--surface)" : "var(--ink)",
+    <section className={`doc-page ${dark ? "doc-page-dark" : ""}`} style={{ background: dark ? "var(--surface-ink)" : "var(--surface)", color: dark ? "var(--surface)" : "var(--ink)",
       borderRadius: "var(--r-lg)", border: "1px solid " + (dark ? "var(--line-ink)" : "var(--line)"), overflow: "hidden",
       padding: "clamp(36px,5vw,72px)", position: "relative", marginBottom: 28 }}>
       {label && (
@@ -160,13 +160,21 @@ function SectionForm({ proposalId, section, onClose, onSaved, fail }) {
 
 function SectionsPanel({ proposalId, fail }) {
   const [sections, setSections] = useState([]);
+  const [snippets, setSnippets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(null); // null | {} | section
 
   async function load() {
     setLoading(true);
-    try { setSections(await api.get(`/api/proposals/${proposalId}/sections`)); }
+    try {
+      const [sectionRows, snippetRows] = await Promise.all([
+        api.get(`/api/proposals/${proposalId}/sections`),
+        api.get("/api/design-library?kind=proposal_snippet")
+      ]);
+      setSections(sectionRows);
+      setSnippets(snippetRows);
+    }
     catch (err) { fail(err); }
     finally { setLoading(false); }
   }
@@ -195,6 +203,22 @@ function SectionsPanel({ proposalId, fail }) {
     catch (err) { fail(err); }
     finally { setBusy(false); }
   }
+  async function insertSnippet(snippetId) {
+    const snippet = snippets.find((it) => it.id === snippetId);
+    if (!snippet) return;
+    setBusy(true);
+    try {
+      await api.json(`/api/proposals/${proposalId}/sections`, "POST", {
+        kind: "text",
+        title: snippet.title || "Voorstel-snippet",
+        body: snippet.body || snippet.summary || "",
+        audience: "client",
+        is_enabled: 1
+      });
+      await load();
+    } catch (err) { fail(err); }
+    finally { setBusy(false); }
+  }
 
   return (
     <div className="card" style={{ padding: "clamp(20px,3vw,32px)", marginBottom: 28 }}>
@@ -203,7 +227,15 @@ function SectionsPanel({ proposalId, fail }) {
           <Kicker>Secties</Kicker>
           <p className="caption" style={{ marginTop: 6, marginBottom: 0 }}>Stel samen welke onderdelen het voorstel bevat en voor wie.</p>
         </div>
-        <button className="btn btn-ghost" onClick={() => setForm({})}><Icon name="plus" size={15} /> Sectie</button>
+        <div className="row gap2 wrap">
+          {snippets.length > 0 && (
+            <select aria-label="Voorstel-snippet invoegen" disabled={busy} defaultValue="" onChange={(e) => { insertSnippet(e.target.value); e.target.value = ""; }} style={{ width: "min(260px, 100%)" }}>
+              <option value="" disabled>Snippet invoegen...</option>
+              {snippets.map((snippet) => <option key={snippet.id} value={snippet.id}>{snippet.title}</option>)}
+            </select>
+          )}
+          <button className="btn btn-ghost" onClick={() => setForm({})}><Icon name="plus" size={15} /> Sectie</button>
+        </div>
       </div>
 
       {loading ? <p className="caption" style={{ margin: 0 }}>Laden…</p>

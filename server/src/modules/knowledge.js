@@ -234,10 +234,12 @@ router.get("/path", (req, res) => {
 // ---- Promote (upsert from a domain entity) --------------------------------
 
 router.post("/promote", validateBody(promoteSchema), (req, res) => {
-  const type = req.body.type || "concept";
-  const label = req.body.label || "Naamloos";
-  const node = promoteEntity(type, req.body.ref_id || "", { label, data: req.body.data ?? {} });
-  res.json(hydrate(node));
+  res.json(promoteEntity(
+    req.body.type || "concept",
+    req.body.ref_id || "",
+    req.body.label || "Naamloos",
+    req.body.data ?? {}
+  ));
 });
 
 module.exports = router;

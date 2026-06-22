@@ -4,7 +4,7 @@ const { id, uploadUrl } = require("./utils");
 const { record } = require("./audit");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
-const { linkEntities } = require("./knowledgeSync");
+const { linkEntities, safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -35,6 +35,20 @@ const fromLibrarySchema = z.object({
 function hydrate(row) {
   if (!row) return null;
   return { ...row, image_url: uploadUrl(row.image_path) };
+}
+
+function promoteMaterial(row) {
+  if (!row) return;
+  safePromote("material", row.id, row.name, {
+    name: row.name || "",
+    project_id: row.project_id || "",
+    spec: row.spec || "",
+    application: row.application || "",
+    brand: row.brand || "",
+    code: row.code || "",
+    supplier_id: row.supplier_id || "",
+    sample_status: row.sample_status || ""
+  });
 }
 
 router.get("/project/:projectId", (req, res) => {
@@ -130,8 +144,10 @@ router.post("/", upload.single("image"), validateForm(materialSchema), (req, res
     supplier_id: req.body.supplier_id || null,
     library_id: req.body.library_id || null
   });
-  linkEntities("project", req.body.project_id, "material", materialId, "gebruikt");
-  res.status(201).json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(materialId)));
+  const material = db.prepare("SELECT * FROM materials WHERE id = ?").get(materialId);
+  promoteMaterial(material);
+  linkEntities("project", material.project_id, "material", materialId, "gebruikt");
+  res.status(201).json(hydrate(material));
 });
 
 // Materials sorting from UI: { order: [ids] } -> sort_order by index.
@@ -176,8 +192,10 @@ router.post("/from-library", validateBody(fromLibrarySchema), (req, res) => {
     sustainability_score: Number(lib.sustainability_score || 0),
     library_id: lib.id
   });
-  linkEntities("project", project_id, "material", materialId, "gebruikt");
-  res.status(201).json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(materialId)));
+  const material = db.prepare("SELECT * FROM materials WHERE id = ?").get(materialId);
+  promoteMaterial(material);
+  linkEntities("project", material.project_id, "material", materialId, "gebruikt");
+  res.status(201).json(hydrate(material));
 });
 
 router.put("/:id", upload.single("image"), validateForm(materialSchema, { partial: true }), (req, res) => {
@@ -216,7 +234,9 @@ router.put("/:id", upload.single("image"), validateForm(materialSchema, { partia
   if (req.file && current.image_path && current.image_path !== req.file.path) {
     removeUpload(current.image_path);
   }
-  res.json(hydrate(db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id)));
+  const material = db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id);
+  promoteMaterial(material);
+  res.json(hydrate(material));
 });
 
 function currentMaterial(req, res) {
