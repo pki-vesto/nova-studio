@@ -10,7 +10,7 @@ Leeswijzer per domein: **Werkt** = functioneel en gewired, **Getest** = automati
 
 ### Core / App-shell
 
-Werkt: React/Vite app-shell met sidebar, topbar, globale zoekinput, projecttabs en error banner. **Hash-routing** (`#/<view>`, `#/project/<id>/<tab>`) met deep links en browser-history. **⌘K / Ctrl+K command palette** om tussen views, projecttabs en projecten te springen. **Optionele login-gate** (alleen actief zodra er gebruikers bestaan). Publieke standalone route `#/portal/<token>` zonder app-shell of auth. Tweaks-paneel in localStorage. Express static serving, `/api/health`.
+Werkt: React/Vite app-shell met sidebar, topbar, globale zoekinput, projecttabs en error banner. **Hash-routing** (`#/<view>`, `#/project/<id>/<tab>`) met deep links en browser-history. **⌘K / Ctrl+K command palette** om tussen views, projecttabs en projecten te springen. **Optionele login-gate** (alleen actief zodra er gebruikers bestaan). Publieke standalone route `#/portal/<token>` zonder app-shell of auth. Tweaks-paneel in localStorage. Mobile polish: compacte topbar/sidebar, horizontaal scrollbare acties/tabs, small-screen page-heads, drawers en buttons die niet buiten de viewport lopen, plus een enkelkoloms Project Overview. Express static serving, `/api/health`.
 
 Validatie & foutafhandeling: inputvalidatie is **gecentraliseerd** in `server/src/modules/validate.js` (`validateBody`/`validateForm`-middleware op zod-basis) en toegepast op de write-endpoints van vrijwel alle modules. Gevalideerde waarden worden gecoërceerd en teruggemerged op `req.body`, terwijl onbekende velden en de PUT-diff-checks intact blijven; schema's vermijden `.default()` zodat handler-fallbacks blijven werken. Elke API-fout deelt één envelope `{ error, details? }`. De globale error-handler in `server/src/index.js` mapt `ZodError` → 400 met `details`, multer `LIMIT_FILE_SIZE` → 413 en respecteert `err.status`.
 
@@ -28,17 +28,17 @@ Getest: API-test "client aanmaken".
 
 Live staat: lokale DB bevat 1 client.
 
-### Projects (soft-delete, optimistic concurrency, volledige duplicatie)
+### Projects (soft-delete, optimistic concurrency, duplicatie, projectbundels)
 
-Werkt: projectlijst met statusfilter en templatefilter, aanmaken met bestaande/nieuwe klant, detail, metadata bewerken, hero-upload, archiveren/herstellen. Zodra gebruikers bestaan worden projecten gestampt met `studio_id`/`owner_id`; lijsten/detailroutes filteren op ownershipscope en project-scoped childroutes worden via centrale authorization gecontroleerd. **Soft-delete** (`deleted_at`, met `/undelete`) — lijst filtert verwijderde projecten weg. **Optimistic concurrency** via `row_version` (409 bij conflict, backward-compatible als er geen versie wordt meegestuurd). **Volledige duplicatie**: kopieert nu project, intake, rooms (met id-remap), materials, moodboards + assets en productselecties. Sample-project endpoint (`/seed-sample`).
+Werkt: projectlijst met statusfilter en templatefilter, aanmaken met bestaande/nieuwe klant, detail, metadata bewerken, hero-upload, archiveren/herstellen. Zodra gebruikers bestaan worden projecten gestampt met `studio_id`/`owner_id`; lijsten/detailroutes filteren op ownershipscope en project-scoped childroutes worden via centrale authorization gecontroleerd. **Soft-delete** (`deleted_at`, met `/undelete`) — lijst filtert verwijderde projecten weg. **Optimistic concurrency** via `row_version` (409 bij conflict, backward-compatible als er geen versie wordt meegestuurd). **Volledige duplicatie**: kopieert nu project, intake, rooms (met id-remap), materials, moodboards + assets en productselecties. **Projectbundel import/export**: projectoverzicht exporteert een JSON-bundel; projectlijst importeert die bundel als nieuw project met nieuwe ID's en herstelde child-relaties. Sample-project endpoint (`/seed-sample`).
 
-Getest: API-test "project aanmaken met nieuwe klant en in lijst zichtbaar".
+Getest: API-tests "project aanmaken met nieuwe klant en in lijst zichtbaar" en "project bundle export en import herstelt projectdata".
 
 Live staat: lokale DB bevat 1 project.
 
 ### Intake (scope/risks/followups + UI-tab)
 
-Werkt: intake upsert per project via API. Nieuwe velden `scope_estimate`, `risks_json`, `followups_json` naast de bestaande intakevelden en `ai_summary`. Volwaardige **Intake-projecttab** (`Intake.jsx`) toont en bewerkt alle velden, inclusief scope-inschatting, risico's en vervolgvragen.
+Werkt: intake upsert per project via API. Nieuwe velden `scope_estimate`, `risks_json`, `followups_json` naast de bestaande intakevelden en `ai_summary`. Volwaardige **Intake-projecttab** (`Intake.jsx`) toont en bewerkt alle velden, inclusief scope-inschatting, risico's en vervolgvragen. De vragenlijst is configureerbaar via `intake_questionnaire`: labels, placeholders, volgorde en aan/uit-status worden server-side bewaard.
 
 Getest: intake-row wordt mee-gehydrateerd in de project-API-test.
 
@@ -54,15 +54,15 @@ Live staat: 0 rooms in lokale DB.
 
 ### Floorplans (schaal/objecten/lagen/versies)
 
-Werkt: floorplan aanmaken met upload of SVG-tekening, bewerken na aanmaak, verwijderen. **Schaal** (`scale_ratio`/`scale_unit`), **vector-objecten** op **lagen** (`floorplan_objects`: walls/meubels/annotaties, CRUD per object), **product/materiaal-koppeling** per object (`product_id`/`material_id`, FK met ON DELETE SET NULL; gekoppelde naam wordt geresolveerd in de objects-GET), **versiebeheer** (`/:id/new-version` kloont de plattegrond + objecten incl. koppelingen), thumbnail-veld.
+Werkt: floorplan aanmaken met upload of SVG-tekening, bewerken na aanmaak, verwijderen. Gelabelde **maatlijnen** worden via de dedicated maatlijntool opgeslagen in `drawing_json.dimensions` en zichtbaar gerenderd. Geuploade beelden/PDF-thumbnails ondersteunen fit, crop-positie en zoom via `drawing_json.image`. **Schaal** (`scale_ratio`/`scale_unit`), **vector-objecten** op **lagen** (`floorplan_objects`: walls/meubels/annotaties, CRUD per object) met herbruikbare objectpresets voor meubels/wanden/annotaties; annotaties kunnen per ruimte worden gescoped via `geometry_json.room_id`. **Product/materiaal-koppeling** per object (`product_id`/`material_id`, FK met ON DELETE SET NULL; gekoppelde naam wordt geresolveerd in de objects-GET), **versiebeheer** (`/:id/new-version` kloont de plattegrond + objecten incl. koppelingen), image/PDF-preview met server-side PDF-thumbnail en SVG-fallback.
 
-Getest: geen.
+Getest: `server/src/modules/floorplans.pdf.test.js`.
 
 Live staat: 0 floorplans.
 
-### Moodboards (edit/tags/varianten/feedback/promote)
+### Moodboards (edit/tags/layout/varianten/feedback/promote)
 
-Werkt: moodboards aanmaken/bewerken/verwijderen, assets uploaden met **caption/bron-URL/tags/sortering**, **varianten** (`/:id/variant` met `variant_of_id`/`variant_label`/`layout_json`), **klantfeedback** (`moodboard_feedback`, sentiment + body), **promote naar Design Library** (`/:id/promote`). Editorial moodboardgrid in `Moodboard.jsx`.
+Werkt: moodboards aanmaken/bewerken/verwijderen, assets uploaden met **caption/bron-URL/tags/sortering**, een drag-canvas dat assetposities bewaart in `layout_json.assets` en de zichtbare collage voedt, **varianten** (`/:id/variant` met `variant_of_id`/`variant_label`/`layout_json`), **klantfeedback** (`moodboard_feedback`, sentiment + body), **promote naar Design Library** (`/:id/promote`). Editorial moodboardgrid in `Moodboard.jsx`.
 
 Getest: geen.
 
@@ -102,7 +102,7 @@ Live staat: 0 suppliers.
 
 ### Design Library
 
-Werkt: **`design_library`** voor herbruikbare concepten, room-templates, product-/materiaalsets en proposal-snippets (`kind`, `data_json`, `tags`, beeld, herkomst-project). CRUD + image upload, **promote** vanuit moodboard. UI in `DesignLibraryScreen.jsx`. Projecttemplates (`is_template`/`template_name`) blijven los hiervan bestaan.
+Werkt: **`design_library`** voor herbruikbare concepten, room-templates, product-/materiaalsets en proposal-snippets (`kind`, `data_json`, `tags`, beeld, herkomst-project). CRUD + image upload, **promote** vanuit moodboard, een actieve projectruimte opslaan als `room_template` en actieve projectshopping/-materialen opslaan als `product_set`/`material_set`. UI in `DesignLibraryScreen.jsx`. Projecttemplates (`is_template`/`template_name`) blijven los hiervan bestaan.
 
 Getest: geen.
 
@@ -110,15 +110,15 @@ Live staat: leeg.
 
 ### Proposals (secties/versies/status/comments/audience/appendices/PDF-theming/exportgeschiedenis)
 
-Werkt: proposal CRUD. **Configureerbare secties** (`proposal_sections`: kind, titel, body, audience client/internal, aan/uit, volgorde + reorder-endpoint; standaard secties worden geseed bij aanmaak). **Versies** (`/:id/new-version` kloont scalars + secties, `version`-veld). **Statusflow** (`/:id/status`: concept → verzonden → geaccepteerd, zet `accepted_at`). **Comments per sectie** (`proposal_comments`). **Browserprint** gebruikt A4-regels, page breaks per voorstelpagina, printkleurbehoud en verborgen app-chrome. **PDF-theming**: editorial cover + per-sectie rendering per audience, met expliciete workflow-waarschuwingen i.p.v. fillertekst en **appendices** wanneer data bestaat. **Exportgeschiedenis** (`/:id/exports`) en klantvriendelijke bestandsnaam met versie/audience. **Projectoverdracht-PDF** (`POST /api/proposals/:projectId/handover-pdf`): klantveilige close-out die ruimtes, materialen, geselecteerde producten (zonder inkoopprijs/marge) en een index van `project_documents` bundelt, met Europe/Amsterdam-datum in bestandsnaam en cover.
+Werkt: proposal CRUD. **Configureerbare secties** (`proposal_sections`: kind, titel, body, audience client/internal, aan/uit, volgorde + reorder-endpoint; standaard secties worden geseed bij aanmaak) met directe invoegactie voor Design Library `proposal_snippet` items. **Versies** (`/:id/new-version` kloont scalars + secties, `version`-veld). **Statusflow** (`/:id/status`: concept → verzonden → geaccepteerd, zet `accepted_at`). **Comments per sectie** (`proposal_comments`). **Browserprint** gebruikt A4-regels, page breaks per voorstelpagina, printkleurbehoud en verborgen app-chrome. **PDF-theming**: editorial cover + per-sectie rendering per audience, met expliciete workflow-waarschuwingen i.p.v. fillertekst en **appendices** wanneer data bestaat. **Exportgeschiedenis** (`/:id/exports`) en klantvriendelijke bestandsnaam met versie/audience. **Projectoverdracht-PDF** (`POST /api/proposals/:projectId/handover-pdf`): klantveilige close-out die ruimtes, materialen, geselecteerde producten (zonder inkoopprijs/marge) en een index van `project_documents` bundelt, met Europe/Amsterdam-datum in bestandsnaam en cover.
 
-Getest: API-tests "voorstel aanmaken, secties geseed en PDF-export", "proposal status flow zet accepted_at", "projectoverdracht PDF bundelt ruimtes materialen producten en documenten zonder inkoopdata" en "projectoverdracht PDF rendert werkflow-waarschuwingen voor leeg project en geeft 404".
+Getest: API-tests "voorstel aanmaken, secties geseed en PDF-export", "proposal PDF visual smoke bewaakt documentstructuur", "proposal status flow zet accepted_at", "projectoverdracht PDF bundelt ruimtes materialen producten en documenten zonder inkoopdata" en "projectoverdracht PDF rendert werkflow-waarschuwingen voor leeg project en geeft 404".
 
 Live staat: 0 proposals.
 
 ### Presentation (configureerbare pagina's, presenter notes, klantmodus)
 
-Werkt: fullscreen presentatie met pagina's uit projectdata, moodboard-assets, materiaal-/productpagina's, budgetblok, keyboard-navigatie, dots, auto-hide chrome. Configureerbare paginavolgorde, presenter notes en een klantmodus zonder edit-chrome in `Presentation.jsx`.
+Werkt: fullscreen presentatie met pagina's uit projectdata, moodboard-assets, materiaal-/productpagina's, budgetblok, keyboard-navigatie, dots, auto-hide chrome. Configureerbare paginavolgorde, presenter notes en een klantmodus zonder edit-chrome in `Presentation.jsx`. PDF-export is bewust niet als aparte slide-export uitgevoerd: proposal-PDF is het printbare klant/interne artefact en houdt appendices plus exportgeschiedenis bij elkaar.
 
 Getest: geen frontendtest.
 

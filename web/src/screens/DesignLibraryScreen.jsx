@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
-import { Ph, Kicker, Tag } from "../components/primitives.jsx";
+import { EmptyState, InlineError, Ph, Kicker, Tag } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 import { fileUrl } from "../lib/format.js";
 
@@ -62,13 +62,21 @@ function ItemDrawer({ ctx, item, onClose, onSaved }) {
 export function DesignLibraryScreen({ ctx }) {
   const [items, setItems] = useState([]);
   const [kind, setKind] = useState("Alle");
+  const [loadError, setLoadError] = useState("");
   const [drawer, setDrawer] = useState(null); // null | {} | item
+  const [roomId, setRoomId] = useState("");
+  const [promoting, setPromoting] = useState("");
 
   const load = useCallback(async () => {
+    setLoadError("");
     try {
       const data = await api.get("/api/design-library");
       setItems(Array.isArray(data) ? data : []);
-    } catch (err) { ctx.fail(err); }
+    } catch (err) {
+      const message = err?.message || String(err);
+      setLoadError(message);
+      ctx.fail(err);
+    }
   }, [ctx]);
 
   useEffect(() => { load(); }, [load]);
@@ -80,6 +88,92 @@ export function DesignLibraryScreen({ ctx }) {
     try { await api.del(`/api/design-library/${id}`); await load(); }
     catch (err) { ctx.fail(err); }
   }
+  async function saveRoomTemplate() {
+    const room = (ctx.project?.rooms || []).find((r) => r.id === roomId);
+    if (!room) return;
+    setPromoting("room_template");
+    try {
+      await api.json("/api/design-library/promote", "POST", {
+        kind: "room_template",
+        title: room.name,
+        summary: [room.room_type, room.floor_level, room.dimensions].filter(Boolean).join(" · "),
+        body: room.concept || room.designer_notes || "",
+        tags: [room.room_type, room.floor_level].filter(Boolean).join(", "),
+        source_project_id: ctx.project.id,
+        data: {
+          room: {
+            name: room.name,
+            room_type: room.room_type || "",
+            floor_level: room.floor_level || "",
+            dimensions: room.dimensions || "",
+            orientation: room.orientation || "",
+            daylight: room.daylight || "",
+            color_notes: room.color_notes || "",
+            designer_notes: room.designer_notes || "",
+            concept: room.concept || ""
+          }
+        }
+      });
+      setRoomId("");
+      await load();
+    } catch (err) { ctx.fail(err); }
+    finally { setPromoting(""); }
+  }
+
+  async function saveCurrentSet(kind) {
+    if (!ctx.project) return;
+    const productItems = ctx.shopping?.items || [];
+    const materialItems = ctx.project.materials || [];
+    const isProductSet = kind === "product_set";
+    const source = isProductSet ? productItems : materialItems;
+    if (source.length === 0) return;
+    setPromoting(kind);
+    try {
+      await api.json("/api/design-library/promote", "POST", {
+        kind,
+        title: `${ctx.project.title} — ${isProductSet ? "productset" : "materiaalset"}`,
+        summary: isProductSet ? `${source.length} producten uit de shoppinglijst` : `${source.length} materialen uit het project`,
+        body: isProductSet
+          ? source.map((item) => `${item.quantity || 1}x ${item.name}`).join("\n")
+          : source.map((item) => [item.name, item.application].filter(Boolean).join(" — ")).join("\n"),
+        tags: isProductSet ? "productset, shoppinglijst" : "materiaalset, materialen",
+        source_project_id: ctx.project.id,
+        data: isProductSet
+          ? {
+            products: source.map((item) => ({
+              product_id: item.product_id,
+              name: item.name,
+              brand: item.brand || "",
+              category: item.category || "",
+              room_id: item.room_id || "",
+              room_name: item.room_name || "",
+              quantity: item.quantity || 1,
+              note: item.designer_note || "",
+              fit_reason: item.fit_reason || ""
+            }))
+          }
+          : {
+            materials: source.map((item) => ({
+              material_id: item.id,
+              name: item.name,
+              brand: item.brand || "",
+              code: item.code || "",
+              spec: item.spec || "",
+              application: item.application || "",
+              maintenance: item.maintenance || "",
+              sustainability_score: item.sustainability_score || 0,
+              sample_status: item.sample_status || "none"
+            }))
+          }
+      });
+      await load();
+    } catch (err) { ctx.fail(err); }
+    finally { setPromoting(""); }
+  }
+
+  const rooms = ctx.project?.rooms || [];
+  const productCount = ctx.shopping?.items?.length || 0;
+  const materialCount = ctx.project?.materials?.length || 0;
 
   return (
     <div className="content content-wide rise">
@@ -88,11 +182,64 @@ export function DesignLibraryScreen({ ctx }) {
         <button className="btn btn-primary btn-lg" onClick={() => setDrawer({})}><Icon name="plus" size={16} /> Item toevoegen</button>
       </div>
 
-      {items.length === 0 ? (
-        <div className="empty"><p className="body" style={{ margin: 0 }}>Nog geen items. Leg concepten, ruimte-templates, product- en materiaalsets en voorstel-snippets vast — herbruikbaar in elk project.</p>
-          <button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Eerste item</button>
-        </div>
+      {loadError ? (
+        <InlineError
+          title="Design Library kon niet worden geladen"
+          body={loadError}
+          action={<button className="btn btn-ghost" onClick={load}>Opnieuw proberen</button>}
+        />
       ) : (
+        <>
+          {ctx.project && rooms.length > 0 && (
+            <div className="card" style={{ padding: "18px 20px", marginBottom: 28 }}>
+              <div className="row between middle wrap" style={{ gap: 14 }}>
+                <div>
+                  <Kicker style={{ marginBottom: 6 }}>Uit huidig project</Kicker>
+                  <div className="body" style={{ fontSize: 14, margin: 0 }}>Bewaar een ruimte als herbruikbare ruimte-template.</div>
+                </div>
+                <div className="row gap2 wrap">
+                  <select value={roomId} onChange={(e) => setRoomId(e.target.value)} style={{ width: 240 }}>
+                    <option value="">Kies ruimte...</option>
+                    {rooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
+                  </select>
+                  <button className="btn btn-clay" onClick={saveRoomTemplate} disabled={!roomId || !!promoting}>
+                    <Icon name="download" size={14} /> {promoting === "room_template" ? "Opslaan..." : "Template opslaan"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {ctx.project && (productCount > 0 || materialCount > 0) && (
+            <div className="card" style={{ padding: "18px 20px", marginBottom: 28 }}>
+              <div className="row between middle wrap" style={{ gap: 14 }}>
+                <div>
+                  <Kicker style={{ marginBottom: 6 }}>Uit huidig project</Kicker>
+                  <div className="body" style={{ fontSize: 14, margin: 0 }}>Bewaar product- en materiaalcombinaties als herbruikbare sets.</div>
+                </div>
+                <div className="row gap2 wrap">
+                  {productCount > 0 && (
+                    <button className="btn btn-clay" onClick={() => saveCurrentSet("product_set")} disabled={!!promoting}>
+                      <Icon name="cart" size={14} /> {promoting === "product_set" ? "Opslaan..." : `Productset (${productCount})`}
+                    </button>
+                  )}
+                  {materialCount > 0 && (
+                    <button className="btn btn-ghost" onClick={() => saveCurrentSet("material_set")} disabled={!!promoting}>
+                      <Icon name="layers" size={14} /> {promoting === "material_set" ? "Opslaan..." : `Materiaalset (${materialCount})`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {items.length === 0 ? (
+            <EmptyState
+              title="Nog geen items"
+              body="Leg concepten, ruimte-templates, product- en materiaalsets en voorstel-snippets vast, zodat ze herbruikbaar zijn in elk project."
+              action={<button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Eerste item</button>}
+            />
+          ) : (
         <>
           <div className="row between middle wrap" style={{ gap: 16, marginBottom: 36 }}>
             <div className="row gap2 wrap">
@@ -104,8 +251,15 @@ export function DesignLibraryScreen({ ctx }) {
             </div>
             <span className="caption">{list.length} items</span>
           </div>
-          <div className="grid grid-3">
-            {list.map((it) => (
+          {list.length === 0 ? (
+            <EmptyState
+              title="Geen items in deze categorie"
+              body="Kies een andere categorie of voeg een nieuw bibliotheekitem van dit type toe."
+              action={<button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Item toevoegen</button>}
+            />
+          ) : (
+            <div className="grid grid-3">
+              {list.map((it) => (
               <article key={it.id} className="card" style={{ overflow: "hidden" }}>
                 <Ph label={`${it.title} — afbeelding`} src={it.image_url || it.image_path} icon="layers" style={{ aspectRatio: "1/1" }} />
                 <div style={{ padding: "16px 18px 18px" }}>
@@ -125,8 +279,11 @@ export function DesignLibraryScreen({ ctx }) {
                   </div>
                 </div>
               </article>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+            </>
+          )}
         </>
       )}
 
