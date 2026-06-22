@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
 import { Ph, SectionHead, EditButton, Tag } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const CELLS = [
   { style: { gridColumn: "span 7", gridRow: "span 4" }, label: "hoofdsfeerbeeld — woonkamer in ochtendlicht", icon: "mood" },
@@ -34,6 +36,40 @@ function splitList(value) {
     .filter(Boolean);
 }
 
+function defaultAssetFrame(index, count) {
+  const cols = count <= 2 ? 2 : 3;
+  const gap = 4;
+  const w = count <= 2 ? 42 : 28;
+  const h = count <= 2 ? 34 : 28;
+  const col = index % cols;
+  const row = Math.floor(index / cols);
+  return {
+    x: clamp(4 + col * (w + gap), 2, 100 - w - 2),
+    y: clamp(6 + row * (h + gap), 2, 100 - h - 2),
+    w,
+    h
+  };
+}
+
+function normaliseLayout(layout, assets) {
+  const source = layout && typeof layout === "object" ? layout : {};
+  const frames = source.assets && typeof source.assets === "object" ? source.assets : {};
+  return {
+    ...source,
+    assets: Object.fromEntries((assets || []).map((asset, index) => {
+      const frame = frames[asset.id] || defaultAssetFrame(index, assets.length);
+      const w = clamp(Number(frame.w) || 28, 14, 72);
+      const h = clamp(Number(frame.h) || 28, 12, 72);
+      return [asset.id, {
+        x: clamp(Number(frame.x) || 0, 0, 100 - w),
+        y: clamp(Number(frame.y) || 0, 0, 100 - h),
+        w,
+        h
+      }];
+    }))
+  };
+}
+
 function SentimentDot({ sentiment }) {
   const s = SENTIMENTS[sentiment] || SENTIMENTS.neutral;
   return (
@@ -41,6 +77,231 @@ function SentimentDot({ sentiment }) {
       <span style={{ width: 8, height: 8, borderRadius: 99, background: s.color, flex: "none" }} />
       {s.label}
     </span>
+  );
+}
+
+function MoodboardLayoutCanvas({ board, fail, reload, flash }) {
+  const assets = board.assets || [];
+  const assetSignature = assets.map((asset) => asset.id).join("|");
+  const [layout, setLayout] = useState(() => normaliseLayout(board.layout, assets));
+  const layoutRef = useRef(layout);
+  const [drag, setDrag] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const next = normaliseLayout(board.layout, assets);
+    layoutRef.current = next;
+    setLayout(next);
+    setDrag(null);
+  }, [board.id, board.layout, assetSignature]);
+
+  function updateLayout(nextOrFn) {
+    setLayout((current) => {
+      const next = typeof nextOrFn === "function" ? nextOrFn(current) : nextOrFn;
+      layoutRef.current = next;
+      return next;
+    });
+  }
+
+  async function save(nextLayout) {
+    setSaving(true);
+    try {
+      await api.json(`/api/moodboards/${board.id}`, "PUT", { layout_json: nextLayout });
+      await reload();
+      flash("Layout opgeslagen.");
+    } catch (err) {
+      fail(err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function moveFrame(assetId, dx, dy, persist = false) {
+    const current = layoutRef.current;
+    const frame = current.assets[assetId];
+    if (!frame) return;
+    const next = {
+      ...current,
+      assets: {
+        ...current.assets,
+        [assetId]: {
+          ...frame,
+          x: clamp(frame.x + dx, 0, 100 - frame.w),
+          y: clamp(frame.y + dy, 0, 100 - frame.h)
+        }
+      }
+    };
+    updateLayout(next);
+    if (persist) save(next);
+  }
+
+  function onPointerDown(event, assetId) {
+    const frame = layout.assets[assetId];
+    if (!frame || event.button !== 0) return;
+    const bounds = event.currentTarget.parentElement.getBoundingClientRect();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDrag({
+      assetId,
+      pointerId: event.pointerId,
+      bounds,
+      startX: event.clientX,
+      startY: event.clientY,
+      frame
+    });
+  }
+
+  function onPointerMove(event) {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const dx = ((event.clientX - drag.startX) / drag.bounds.width) * 100;
+    const dy = ((event.clientY - drag.startY) / drag.bounds.height) * 100;
+    updateLayout((current) => {
+      const frame = drag.frame;
+      return {
+        ...current,
+        assets: {
+          ...current.assets,
+          [drag.assetId]: {
+            ...frame,
+            x: clamp(frame.x + dx, 0, 100 - frame.w),
+            y: clamp(frame.y + dy, 0, 100 - frame.h)
+          }
+        }
+      };
+    });
+  }
+
+  function onPointerUp(event) {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    setDrag(null);
+    save(layoutRef.current);
+  }
+
+  async function resetLayout() {
+    const next = normaliseLayout({}, assets);
+    updateLayout(next);
+    await save(next);
+  }
+
+  if (assets.length === 0) return null;
+
+  return (
+    <div style={{ margin: "12px 0 14px" }}>
+      <div className="row between middle" style={{ marginBottom: 8, gap: 10 }}>
+        <div>
+          <div className="caption" style={{ letterSpacing: ".14em", textTransform: "uppercase" }}>Layout-canvas</div>
+          <p className="caption" style={{ margin: "4px 0 0", color: "var(--ink-2)" }}>Sleep beelden naar hun plek; posities worden in dit moodboard bewaard.</p>
+        </div>
+        <button type="button" className="btn btn-ghost" style={{ padding: "7px 10px" }} onClick={resetLayout} disabled={saving}>
+          <Icon name="refresh" size={13} /> Reset
+        </button>
+      </div>
+      <div
+        style={{
+          position: "relative",
+          aspectRatio: "16 / 9",
+          minHeight: 220,
+          borderRadius: "var(--r-md)",
+          border: "1px solid var(--line)",
+          background: "linear-gradient(135deg, var(--surface), var(--surface-2))",
+          overflow: "hidden",
+          touchAction: "none"
+        }}
+      >
+        {assets.map((asset) => {
+          const frame = layout.assets[asset.id];
+          if (!frame) return null;
+          return (
+            <button
+              key={asset.id}
+              type="button"
+              onPointerDown={(event) => onPointerDown(event, asset.id)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={() => setDrag(null)}
+              onKeyDown={(event) => {
+                const step = event.shiftKey ? 4 : 1;
+                const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+                if (!moves[event.key]) return;
+                event.preventDefault();
+                moveFrame(asset.id, moves[event.key][0], moves[event.key][1], true);
+              }}
+              aria-label={`Verplaats ${asset.caption || asset.file_name || "beeld"}`}
+              style={{
+                position: "absolute",
+                left: `${frame.x}%`,
+                top: `${frame.y}%`,
+                width: `${frame.w}%`,
+                height: `${frame.h}%`,
+                padding: 0,
+                border: drag?.assetId === asset.id ? "2px solid var(--clay)" : "1px solid rgba(0,0,0,.12)",
+                borderRadius: 6,
+                overflow: "hidden",
+                cursor: "grab",
+                background: "var(--surface)",
+                boxShadow: "var(--shadow-2)"
+              }}
+            >
+              <img src={asset.url || asset.file_path} alt={asset.caption || ""} draggable="false" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }} />
+              {asset.caption && (
+                <span className="caption" style={{ position: "absolute", left: 6, right: 6, bottom: 5, padding: "2px 5px", borderRadius: 4, background: "rgba(255,255,255,.86)", color: "var(--ink)", fontSize: 10, lineHeight: 1.2, textAlign: "left" }}>
+                  {asset.caption}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MoodboardCollage({ board }) {
+  const assets = board.assets || [];
+  const layout = normaliseLayout(board.layout, assets);
+
+  if (assets.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        aspectRatio: "16 / 9",
+        minHeight: 360,
+        marginTop: 16,
+        borderRadius: "var(--r-md)",
+        overflow: "hidden",
+        background: "var(--surface-2)"
+      }}
+    >
+      {assets.map((asset) => {
+        const frame = layout.assets[asset.id];
+        if (!frame) return null;
+        return (
+          <figure
+            key={asset.id}
+            style={{
+              position: "absolute",
+              left: `${frame.x}%`,
+              top: `${frame.y}%`,
+              width: `${frame.w}%`,
+              height: `${frame.h}%`,
+              margin: 0,
+              borderRadius: "var(--r-md)",
+              overflow: "hidden",
+              boxShadow: "var(--shadow-2)",
+              background: "var(--surface)"
+            }}
+          >
+            <img src={asset.url || asset.file_path} alt={asset.caption || ""} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            {asset.caption && (
+              <figcaption className="caption" style={{ position: "absolute", left: 10, right: 10, bottom: 9, padding: "4px 7px", borderRadius: 5, background: "rgba(255,255,255,.88)", color: "var(--ink)", fontSize: 11, lineHeight: 1.25 }}>
+                {asset.caption}
+              </figcaption>
+            )}
+          </figure>
+        );
+      })}
+    </div>
   );
 }
 
@@ -290,6 +551,8 @@ function MoodboardDrawer({ ctx, onClose }) {
               </button>
             </div>
 
+            <MoodboardLayoutCanvas board={b} fail={fail} reload={reload} flash={flash} />
+
             <div className="row gap3 wrap" style={{ marginBottom: 6 }}>
               {(b.assets || []).map((a) => (
                 <div key={a.id} style={{ position: "relative", width: 96 }}>
@@ -336,6 +599,7 @@ export function Moodboard({ ctx }) {
   const { project, moodboards } = ctx;
   const [editing, setEditing] = useState(false);
   const assets = moodboards.flatMap((b) => b.assets || []);
+  const layoutBoard = moodboards.find((b) => (b.assets || []).length > 0);
   const pillars = moodboards.filter((b) => b.title && b.description).slice(0, 3).map((b) => [b.title, b.description]);
   const shownPillars = pillars.length ? pillars : DEFAULT_PILLARS;
 
@@ -348,22 +612,26 @@ export function Moodboard({ ctx }) {
         right={<EditButton onClick={() => setEditing(true)} />} />
 
       {/* Asymmetric editorial collage */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(12,1fr)", gridAutoRows: "118px", gap: 18, marginTop: 16 }}>
-        {CELLS.map((cell, i) => {
-          if (cell.quote) {
-            return (
-              <div key={i} style={{ ...cell.style, display: "flex", flexDirection: "column", justifyContent: "center", padding: "8px 6px" }}>
-                <span className="serif" style={{ fontSize: 30, lineHeight: 1.15, color: "var(--ink)" }}>
-                  “Rust ontstaat niet door leegte, maar door materialen die kloppen.”
-                </span>
-                <span className="caption" style={{ marginTop: 16, color: "var(--clay)" }}>— Ontwerpnotitie, Nova Studio</span>
-              </div>
-            );
-          }
-          const asset = assets[imgIdx++];
-          return <Ph key={i} label={cell.label} src={asset?.url || asset?.file_path} icon={cell.icon} style={{ ...cell.style, borderRadius: "var(--r-md)" }} />;
-        })}
-      </div>
+      {layoutBoard ? (
+        <MoodboardCollage board={layoutBoard} />
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(12,1fr)", gridAutoRows: "118px", gap: 18, marginTop: 16 }}>
+          {CELLS.map((cell, i) => {
+            if (cell.quote) {
+              return (
+                <div key={i} style={{ ...cell.style, display: "flex", flexDirection: "column", justifyContent: "center", padding: "8px 6px" }}>
+                  <span className="serif" style={{ fontSize: 30, lineHeight: 1.15, color: "var(--ink)" }}>
+                    “Rust ontstaat niet door leegte, maar door materialen die kloppen.”
+                  </span>
+                  <span className="caption" style={{ marginTop: 16, color: "var(--clay)" }}>— Ontwerpnotitie, Nova Studio</span>
+                </div>
+              );
+            }
+            const asset = assets[imgIdx++];
+            return <Ph key={i} label={cell.label} src={asset?.url || asset?.file_path} icon={cell.icon} style={{ ...cell.style, borderRadius: "var(--r-md)" }} />;
+          })}
+        </div>
+      )}
 
       <hr className="hr" style={{ margin: "56px 0" }} />
 

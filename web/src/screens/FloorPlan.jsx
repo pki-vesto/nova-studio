@@ -35,6 +35,50 @@ function scaleCaption(fp) {
   const unit = fp.scale_unit ? ` (${fp.scale_unit})` : "";
   return `Schaal 1:${fp.scale_ratio}${unit}`;
 }
+function distanceLabel(line) {
+  if (line?.label) return line.label;
+  const dx = Number(line?.x2 || 0) - Number(line?.x1 || 0);
+  const dy = Number(line?.y2 || 0) - Number(line?.y1 || 0);
+  return `${Math.round(Math.sqrt(dx * dx + dy * dy))} px`;
+}
+function renderDimensions(dimensions = []) {
+  return dimensions.map((line, i) => {
+    const midX = (Number(line.x1 || 0) + Number(line.x2 || 0)) / 2;
+    const midY = (Number(line.y1 || 0) + Number(line.y2 || 0)) / 2;
+    return (
+      <g key={i}>
+        <line x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} />
+        <circle cx={line.x1} cy={line.y1} r="4" fill="#7c563c" />
+        <circle cx={line.x2} cy={line.y2} r="4" fill="#7c563c" />
+        <text x={midX} y={midY - 8} textAnchor="middle" fill="#7c563c" fontSize="14" fontWeight="700" paintOrder="stroke" stroke="var(--surface-2)" strokeWidth="4">
+          {distanceLabel(line)}
+        </text>
+      </g>
+    );
+  });
+}
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+function imageControls(drawing) {
+  const image = drawing?.image && typeof drawing.image === "object" ? drawing.image : {};
+  const fit = ["contain", "cover"].includes(image.fit) ? image.fit : "contain";
+  return {
+    fit,
+    x: clamp(Number(image.x ?? 50) || 50, 0, 100),
+    y: clamp(Number(image.y ?? 50) || 50, 0, 100),
+    zoom: clamp(Number(image.zoom ?? 100) || 100, 50, 220)
+  };
+}
+function imageStyle(plan) {
+  const controls = imageControls(plan?.drawing);
+  return {
+    objectFit: controls.fit,
+    objectPosition: `${controls.x}% ${controls.y}%`,
+    transform: `scale(${controls.zoom / 100})`,
+    transformOrigin: `${controls.x}% ${controls.y}%`
+  };
+}
 
 function RoomsDrawer({ ctx, onClose }) {
   const { project, reload, fail } = ctx;
@@ -126,6 +170,7 @@ function PlanDrawer({ ctx, onClose }) {
   const [drawing, setDrawing] = useState(EMPTY_DRAWING);
   const [draft, setDraft] = useState(null);
   const [tool, setTool] = useState("walls");
+  const [dimensionLabel, setDimensionLabel] = useState("");
   const [meta, setMeta] = useState({ name: "Concept plattegrond", floor_level: "" });
   const [file, setFile] = useState(null);
   const svgRef = useRef(null);
@@ -139,7 +184,14 @@ function PlanDrawer({ ctx, onClose }) {
     const p = point(e);
     if (tool === "objects") { setDrawing((d) => ({ ...d, objects: [...d.objects, { x: p.x, y: p.y, w: 54, h: 34 }] })); return; }
     if (!draft) setDraft(p);
-    else { setDrawing((d) => ({ ...d, [tool]: [...d[tool], { x1: draft.x, y1: draft.y, x2: p.x, y2: p.y }] })); setDraft(null); }
+    else {
+      const line = { x1: draft.x, y1: draft.y, x2: p.x, y2: p.y };
+      setDrawing((d) => ({
+        ...d,
+        [tool]: [...d[tool], tool === "dimensions" ? { ...line, label: dimensionLabel.trim() || distanceLabel(line) } : line]
+      }));
+      setDraft(null);
+    }
   }
   function undo() { setDrawing((d) => ({ ...d, [tool]: d[tool].slice(0, -1) })); }
 
@@ -172,14 +224,22 @@ function PlanDrawer({ ctx, onClose }) {
         <button type="button" className="btn btn-ghost" style={{ padding: "7px 11px" }} onClick={undo}>Ongedaan</button>
         <button type="button" className="btn btn-ghost" style={{ padding: "7px 11px" }} onClick={() => setDrawing(EMPTY_DRAWING)}>Leeg</button>
       </div>
+      {tool === "dimensions" && (
+        <Field label="Maatlabel voor volgende maatlijn">
+          <input value={dimensionLabel} onChange={(e) => setDimensionLabel(e.target.value)} placeholder="Bijv. 320 cm of doorgang 900 mm" />
+        </Field>
+      )}
       <div className="card" style={{ overflow: "hidden", marginBottom: 12 }}>
         <svg ref={svgRef} viewBox="0 0 720 420" onClick={clickCanvas} style={{ display: "block", width: "100%", cursor: "crosshair" }}>
           <rect x="0" y="0" width="720" height="420" fill="var(--surface-2)" />
-          {["walls", "doors", "windows", "dimensions"].map((kind) => (
+          {["walls", "doors", "windows"].map((kind) => (
             <g key={kind} stroke={STROKES[kind][0]} strokeWidth={STROKES[kind][1]} strokeLinecap="round" strokeDasharray={kind === "dimensions" ? "8 6" : undefined}>
               {drawing[kind].map((l, i) => <line key={i} {...l} />)}
             </g>
           ))}
+          <g stroke={STROKES.dimensions[0]} strokeWidth={STROKES.dimensions[1]} strokeLinecap="round" strokeDasharray="8 6">
+            {renderDimensions(drawing.dimensions)}
+          </g>
           {drawing.objects.map((o, i) => <rect key={i} x={o.x} y={o.y} width={o.w} height={o.h} rx="4" fill="#e8ded3" stroke="#a47755" />)}
           {draft && <circle cx={draft.x} cy={draft.y} r="6" fill="var(--clay)" />}
         </svg>
@@ -212,7 +272,7 @@ function PlanVisual({ plan }) {
       if (plan.thumb_url) {
         return (
           <div className="ph has-img" style={{ aspectRatio: "16/11", position: "relative" }}>
-            <img src={plan.thumb_url} alt={plan.name || "PDF plattegrond"} />
+            <img src={plan.thumb_url} alt={plan.name || "PDF plattegrond"} style={imageStyle(plan)} />
             <a className="btn btn-ghost" href={plan.file_url} target="_blank" rel="noreferrer" style={{ position: "absolute", right: 12, bottom: 12, gap: 8, background: "rgba(255,255,255,0.92)" }}>
               <Icon name="doc" size={16} /> PDF openen
             </a>
@@ -230,7 +290,7 @@ function PlanVisual({ plan }) {
     const src = plan.thumb_url || plan.file_url;
     return (
       <div className="ph has-img" style={{ aspectRatio: "16/11" }}>
-        <img src={src} alt={plan.name || "Plattegrond"} />
+        <img src={src} alt={plan.name || "Plattegrond"} style={imageStyle(plan)} />
       </div>
     );
   }
@@ -238,13 +298,14 @@ function PlanVisual({ plan }) {
     return <Ph label="" src={plan.file_path} icon="plan" style={{ aspectRatio: "16/11" }} alt={plan.name} />;
   }
   const d = plan?.drawing;
-  const hasDrawing = d && (d.walls?.length || d.doors?.length || d.windows?.length);
+  const hasDrawing = d && (d.walls?.length || d.doors?.length || d.windows?.length || d.dimensions?.length);
   if (hasDrawing) {
     return (
       <svg viewBox="0 0 720 420" style={{ display: "block", width: "100%", aspectRatio: "16/11", background: "var(--surface-2)" }}>
         <g stroke="#2d2926" strokeWidth="5" strokeLinecap="round">{(d.walls || []).map((l, i) => <line key={i} {...l} />)}</g>
         <g stroke="#a47755" strokeWidth="4" strokeLinecap="round">{(d.doors || []).map((l, i) => <line key={i} {...l} />)}</g>
         <g stroke="#447c88" strokeWidth="4" strokeLinecap="round">{(d.windows || []).map((l, i) => <line key={i} {...l} />)}</g>
+        <g stroke="#7c563c" strokeWidth="2" strokeLinecap="round" strokeDasharray="8 6">{renderDimensions(d.dimensions || [])}</g>
         {(d.objects || []).map((o, i) => <rect key={i} x={o.x} y={o.y} width={o.w} height={o.h} rx="4" fill="#e8ded3" stroke="#a47755" />)}
       </svg>
     );
@@ -255,12 +316,17 @@ function PlanVisual({ plan }) {
 // Edit an existing floorplan's metadata + scale, plus its objects/layers.
 function PlanEditDrawer({ ctx, plan, onClose }) {
   const { reload, fail } = ctx;
+  const existingImage = imageControls(plan.drawing);
   const [f, setF] = useState({
     name: plan.name || "",
     floor_level: plan.floor_level || "",
     notes: plan.notes || "",
     scale_ratio: plan.scale_ratio ? String(plan.scale_ratio) : "",
-    scale_unit: plan.scale_unit || "cm"
+    scale_unit: plan.scale_unit || "cm",
+    image_fit: existingImage.fit,
+    image_x: String(existingImage.x),
+    image_y: String(existingImage.y),
+    image_zoom: String(existingImage.zoom)
   });
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -268,12 +334,22 @@ function PlanEditDrawer({ ctx, plan, onClose }) {
   async function save() {
     setSaving(true);
     try {
+      const drawing = {
+        ...(plan.drawing || {}),
+        image: {
+          fit: f.image_fit,
+          x: clamp(Number(f.image_x) || 50, 0, 100),
+          y: clamp(Number(f.image_y) || 50, 0, 100),
+          zoom: clamp(Number(f.image_zoom) || 100, 50, 220)
+        }
+      };
       await api.json(`/api/floorplans/${plan.id}`, "PUT", {
         name: f.name,
         floor_level: f.floor_level,
         notes: f.notes,
         scale_ratio: Number(f.scale_ratio) || 0,
-        scale_unit: f.scale_unit
+        scale_unit: f.scale_unit,
+        drawing
       });
       await reload();
       onClose();
@@ -297,6 +373,39 @@ function PlanEditDrawer({ ctx, plan, onClose }) {
       <Field label="Notities"><textarea value={f.notes} onChange={set("notes")} rows={3} /></Field>
       {scaleCaption(f.scale_ratio ? { scale_ratio: f.scale_ratio, scale_unit: f.scale_unit } : {}) && (
         <p className="caption" style={{ marginTop: 8 }}>{scaleCaption({ scale_ratio: f.scale_ratio, scale_unit: f.scale_unit })}</p>
+      )}
+      {(plan.file_url || plan.thumb_url) && (
+        <>
+          <div className="hr" style={{ margin: "20px 0 14px" }} />
+          <h4 className="serif" style={{ fontSize: 18, margin: "0 0 12px" }}>Beeld uitsnede</h4>
+          <div className="form-grid form-grid-2" style={{ marginBottom: 12 }}>
+            <Field label="Passend maken">
+              <select value={f.image_fit} onChange={set("image_fit")}>
+                <option value="contain">Volledig tonen</option>
+                <option value="cover">Vullen / uitsnede</option>
+              </select>
+            </Field>
+            <Field label="Zoom (%)">
+              <input type="number" min="50" max="220" value={f.image_zoom} onChange={set("image_zoom")} />
+            </Field>
+          </div>
+          <div className="form-grid form-grid-2" style={{ marginBottom: 12 }}>
+            <Field label="Horizontale positie (%)">
+              <input type="number" min="0" max="100" value={f.image_x} onChange={set("image_x")} />
+            </Field>
+            <Field label="Verticale positie (%)">
+              <input type="number" min="0" max="100" value={f.image_y} onChange={set("image_y")} />
+            </Field>
+          </div>
+          <div className="ph has-img" style={{ aspectRatio: "16/11", marginBottom: 2 }}>
+            <img src={plan.thumb_url || plan.file_url} alt={plan.name || "Plattegrond"} style={{
+              objectFit: f.image_fit,
+              objectPosition: `${clamp(Number(f.image_x) || 50, 0, 100)}% ${clamp(Number(f.image_y) || 50, 0, 100)}%`,
+              transform: `scale(${clamp(Number(f.image_zoom) || 100, 50, 220) / 100})`,
+              transformOrigin: `${clamp(Number(f.image_x) || 50, 0, 100)}% ${clamp(Number(f.image_y) || 50, 0, 100)}%`
+            }} />
+          </div>
+        </>
       )}
       <div className="hr" style={{ margin: "20px 0 14px" }} />
       <ObjectsPanel ctx={ctx} plan={plan} />
