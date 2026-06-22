@@ -7,7 +7,7 @@ const { seedSampleProject } = require("./seed");
 const { stampOwnership, visibleProjectWhere } = require("./authorization");
 const { flagFilter, likeFilter, textFilter } = require("./filtering");
 const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
-const { safePromote } = require("./knowledgeSync");
+const { linkEntities, safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -446,6 +446,7 @@ router.post("/", (req, res) => {
     FROM projects p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id = ?
   `).get(projectId);
   promoteProject(project);
+  if (project?.client_id) linkEntities("project", projectId, "client", project.client_id, "klant");
   res.status(201).json(hydrateProject(project));
 });
 
@@ -517,6 +518,7 @@ router.put("/:id", (req, res) => {
   const scope = visibleProjectWhere(req, "p");
   const project = db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params });
   promoteProject(project);
+  if (project?.client_id) linkEntities("project", req.params.id, "client", project.client_id, "klant");
   res.json(hydrateProject(project));
 });
 

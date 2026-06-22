@@ -54,4 +54,45 @@ function safePromote(type, refId, label, data) {
   }
 }
 
-module.exports = { promoteEntity, safePromote, hydrate };
+function resolveEntityNode(type, refId, options = {}) {
+  if (!type || !refId) return null;
+  const existing = db.prepare("SELECT * FROM knowledge_nodes WHERE type = ? AND ref_id = ? ORDER BY created_at, rowid").get(type, refId);
+  if (existing) return hydrate(existing);
+  return safePromote(type, refId, options.label || "", options.data || {});
+}
+
+function linkEntities(fromType, fromRef, toType, toRef, relation, options = {}) {
+  try {
+    if (!fromType || !fromRef || !toType || !toRef || !relation) return null;
+    const from = resolveEntityNode(fromType, fromRef, options.from || {});
+    const to = resolveEntityNode(toType, toRef, options.to || {});
+    if (!from || !to) return null;
+
+    const existing = db.prepare(`
+      SELECT * FROM knowledge_edges
+      WHERE from_id = ? AND to_id = ? AND relation = ?
+      ORDER BY created_at, rowid
+    `).get(from.id, to.id, relation);
+    if (existing) return existing;
+
+    const edgeId = id("kedge");
+    db.prepare(`
+      INSERT INTO knowledge_edges (id, from_id, to_id, relation, weight)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(edgeId, from.id, to.id, relation, Number(options.weight ?? 1));
+    record("knowledge_edge", edgeId, "create", relation);
+    return db.prepare("SELECT * FROM knowledge_edges WHERE id = ?").get(edgeId);
+  } catch (err) {
+    record("knowledge_edge", "", "link_error", {
+      from_type: fromType || "",
+      from_ref: fromRef || "",
+      to_type: toType || "",
+      to_ref: toRef || "",
+      relation: relation || "",
+      error: err && err.message ? err.message : String(err)
+    });
+    return null;
+  }
+}
+
+module.exports = { promoteEntity, safePromote, hydrate, linkEntities, resolveEntityNode };

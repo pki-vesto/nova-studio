@@ -6,7 +6,7 @@ const { validateBody, validateForm, z } = require("./validate");
 const { flagFilter, likeFilter, textFilter } = require("./filtering");
 const { record } = require("./audit");
 const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
-const { safePromote } = require("./knowledgeSync");
+const { linkEntities, safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -306,6 +306,7 @@ router.post("/", upload.single("image"), validateForm(productSchema), (req, res)
   }, "initial");
   const product = db.prepare("SELECT * FROM products WHERE id = ?").get(productId);
   promoteProduct(product);
+  if (product.supplier_id) linkEntities("product", productId, "supplier", product.supplier_id, "leverancier");
   res.status(201).json(product);
 });
 
@@ -397,6 +398,7 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
   }
   const product = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
   promoteProduct(product);
+  if (product?.supplier_id) linkEntities("product", req.params.id, "supplier", product.supplier_id, "leverancier");
   res.json(product);
 });
 
@@ -467,13 +469,16 @@ router.post("/:id/variants", upload.single("image"), validateForm(productSchema)
     availability_status: req.body.availability_status || "unknown",
     price_date: req.body.price_date || ""
   });
+  const created = db.prepare("SELECT * FROM products WHERE id = ?").get(variantId);
   recordPriceHistory(variantId, {
     purchase_price: purchasePrice,
     sale_price: salePrice,
     price: catalogPrice
   }, "variant_initial");
   ensureProductCategory(req.body.category ?? parent.category);
-  res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(variantId));
+  promoteProduct(created);
+  if (created?.supplier_id) linkEntities("product", variantId, "supplier", created.supplier_id, "leverancier");
+  res.status(201).json(created);
 });
 
 // --- Favorites ---------------------------------------------------------------
@@ -610,6 +615,7 @@ router.post("/select", validateBody(selectSchema), (req, res) => {
     req.body.client_comment || "",
     req.body.is_alternative ? 1 : 0
   );
+  linkEntities("project", req.body.project_id, "product", req.body.product_id, "bevat");
   res.status(201).json(db.prepare("SELECT * FROM project_products WHERE id = ?").get(selectionId));
 });
 
