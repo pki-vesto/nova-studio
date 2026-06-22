@@ -86,9 +86,9 @@ Live staat: globale tabel aanwezig, 0 projectmaterials.
 
 ### Products (pricing/marge/btw/varianten/favorieten/CSV/beschikbaarheid)
 
-Werkt: productbibliotheek met CRUD + image upload, categorie-/zoekfilter. **Inkoop-/verkoopprijs, marge, btw-percentage, beschikbaarheidsstatus, prijsdatum**. **Varianten** (`parent_product_id`, `/:id/variants`). **Favorieten** (`product_favorites`, toggle). **Vergelijken** (`/compare`). **CSV-import en -export** (`/import-csv`, `/export.csv`, plus shoppinglijst-CSV per project). Supplier-koppeling via `supplier_id`. Productselectie per project met quantity, designer-note, fit-reason, feature-markering, **itemstatus** (voorgesteld/akkoord/afgewezen), klantopmerking en alternatief-markering. Shoppinglijst + budgettotaal.
+Werkt: productbibliotheek met CRUD + image upload, categorie-/zoekfilter. Server-side productfilters gebruiken de gedeelde filterhelpers en ondersteunen `q`, `category`, `status`, `supplier_id` en `favorites=1`. **Inkoop-/verkoopprijs, marge, btw-percentage, beschikbaarheidsstatus, prijsdatum**. **Varianten** (`parent_product_id`, `/:id/variants`). **Favorieten** (`product_favorites`, toggle). **Vergelijken** (`/compare`). **CSV-import en -export** (`/import-csv`, `/export.csv`, plus shoppinglijst-CSV per project). Supplier-koppeling via `supplier_id`. Productselectie per project met quantity, designer-note, fit-reason, feature-markering, **itemstatus** (voorgesteld/akkoord/afgewezen), klantopmerking en alternatief-markering. Shoppinglijst + budgettotaal.
 
-Getest: API-test "productselectie en shoppinglijst totaal".
+Getest: API-tests "productselectie en shoppinglijst totaal" en "productlijst filters werken uniform"; unit-test "filter helpers normalize query values".
 
 Live staat: 0 products / 0 project_products.
 
@@ -213,7 +213,7 @@ Live staat: nog geen back-ups gemaakt op de live instance.
 - **E-mailverzending vereist configuratie**: portaalreacties verschijnen altijd in-app (bel + paneel). E-mail wordt alleen verstuurd wanneer `NOVA_SMTP_URL` is gezet én `nodemailer` is geïnstalleerd; anders blijft het bij in-app (`sent = 0`). Bewust geen geforceerde mail-dependency.
 - **Validatie is nu gecentraliseerd** via `validate.js` en toegepast op de write-endpoints van vrijwel alle modules; alle API-fouten delen het envelope `{ error, details? }`. `projects` en `auth` gebruiken nog eigen inline zod-schema's (`safeParse`) i.p.v. de gedeelde middleware, maar leveren hetzelfde foutcontract.
 - **Testdekking groeit, maar mist nog frontend/e2e**: backend-kernflows zijn nu gedekt (46 tests: API, validatie, auth/RBAC, authorization, back-up, budget/portal/concurrency/CSV/AI). Nog geen React-component-/e2e-/PDF-visual-tests.
-- **Geen pagination/filtering-standaard** op de lijst-endpoints (datasets zijn nog klein).
+- **Pagination is opt-in voorbereid; filtering heeft nu een lichte standaardhelper** (`filtering.js`) voor genormaliseerde tekst-, LIKE- en boolean-queryfilters. Nog geen volledige query-builder/service-laag.
 
 ## Hoogste Prioriteiten (nu het meest waardevol)
 

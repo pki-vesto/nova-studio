@@ -3,6 +3,7 @@ const { db } = require("../db/database");
 const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
+const { flagFilter, likeFilter, textFilter } = require("./filtering");
 const { record } = require("./audit");
 const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
 const { safePromote } = require("./knowledgeSync");
@@ -184,10 +185,26 @@ function parseCsv(text) {
 }
 
 router.get("/", (req, res) => {
+  const filters = {
+    q: likeFilter(req.query.q),
+    category: textFilter(req.query.category),
+    status: textFilter(req.query.status),
+    supplier_id: textFilter(req.query.supplier_id),
+    favorites: flagFilter(req.query.favorites) ? 1 : 0
+  };
   const paged = hasPagination(req.query);
   const page = parsePagination(req.query);
+  const params = { ...filters, ...page };
   if (paged) {
-    const total = db.prepare("SELECT COUNT(*) AS total FROM products").get().total;
+    const total = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM products p
+      WHERE (@q = '%%' OR p.name LIKE @q OR p.brand LIKE @q OR p.supplier LIKE @q OR p.category LIKE @q OR p.sku LIKE @q)
+        AND (@category = '' OR p.category = @category)
+        AND (@status = '' OR p.status = @status)
+        AND (@supplier_id = '' OR p.supplier_id = @supplier_id)
+        AND (@favorites = 0 OR EXISTS(SELECT 1 FROM product_favorites f WHERE f.product_id = p.id))
+    `).get(params).total;
     setPaginationHeaders(res, { total, ...page });
   }
   res.json(db.prepare(`
@@ -195,9 +212,14 @@ router.get("/", (req, res) => {
       EXISTS(SELECT 1 FROM product_favorites f WHERE f.product_id = p.id) AS is_favorite
     FROM products p
     LEFT JOIN products alt ON alt.id = p.alternative_to_id
+    WHERE (@q = '%%' OR p.name LIKE @q OR p.brand LIKE @q OR p.supplier LIKE @q OR p.category LIKE @q OR p.sku LIKE @q)
+      AND (@category = '' OR p.category = @category)
+      AND (@status = '' OR p.status = @status)
+      AND (@supplier_id = '' OR p.supplier_id = @supplier_id)
+      AND (@favorites = 0 OR EXISTS(SELECT 1 FROM product_favorites f WHERE f.product_id = p.id))
     ORDER BY p.updated_at DESC, p.name
     ${paginationSql(paged)}
-  `).all(page));
+  `).all(params));
 });
 
 // --- Managed categories ------------------------------------------------------

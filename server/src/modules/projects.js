@@ -5,6 +5,7 @@ const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { seedSampleProject } = require("./seed");
 const { stampOwnership, visibleProjectWhere } = require("./authorization");
+const { flagFilter, likeFilter, textFilter } = require("./filtering");
 const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
 const { safePromote } = require("./knowledgeSync");
 
@@ -367,9 +368,9 @@ function promoteProject(row) {
 }
 
 router.get("/", (req, res) => {
-  const q = `%${req.query.q || ""}%`;
-  const status = req.query.status || "";
-  const templates = req.query.templates === "1";
+  const q = likeFilter(req.query.q);
+  const status = textFilter(req.query.status);
+  const templates = flagFilter(req.query.templates);
   const scope = visibleProjectWhere(req, "p");
   const paged = hasPagination(req.query);
   const page = parsePagination(req.query);

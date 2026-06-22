@@ -107,6 +107,39 @@ test("productselectie en shoppinglijst totaal", async () => {
   assert.equal(shopping.total, 2000, "2 × €1000");
 });
 
+test("productlijst filters werken uniform", async () => {
+  const supplier = await (await j("/api/suppliers", "POST", { name: "Studio Lijn" })).json();
+  const sofa = await (await j("/api/products", "POST", {
+    name: "Linnen bank",
+    brand: "Nova",
+    category: "Meubilair",
+    status: "approved",
+    supplier_id: supplier.id
+  })).json();
+  await j("/api/products", "POST", {
+    name: "Keramiek lamp",
+    brand: "Nova",
+    category: "Verlichting",
+    status: "candidate"
+  });
+  await j(`/api/products/${sofa.id}/favorite`, "POST", {});
+
+  const byQuery = await (await j("/api/products?q=linnen")).json();
+  assert.deepEqual(byQuery.map((p) => p.id), [sofa.id]);
+
+  const byCategory = await (await j("/api/products?category=Meubilair")).json();
+  assert.deepEqual(byCategory.map((p) => p.id), [sofa.id]);
+
+  const byStatus = await (await j("/api/products?status=approved")).json();
+  assert.deepEqual(byStatus.map((p) => p.id), [sofa.id]);
+
+  const bySupplier = await (await j(`/api/products?supplier_id=${supplier.id}`)).json();
+  assert.deepEqual(bySupplier.map((p) => p.id), [sofa.id]);
+
+  const favorites = await (await j("/api/products?favorites=1")).json();
+  assert.deepEqual(favorites.map((p) => p.id), [sofa.id]);
+});
+
 test("project bundle export en import herstelt projectdata", async () => {
   const project = await (await j("/api/projects", "POST", { title: "Bundleproject", clientName: "Bundle Klant" })).json();
   const room = await (await j("/api/rooms", "POST", { project_id: project.id, name: "Woonkamer", floor_level: "Begane grond", concept: "Rustige basis" })).json();
@@ -182,10 +215,10 @@ test("list endpoints support opt-in limit offset pagination headers", async () =
 });
 
 test("productcategorieen beheren en toepassen op producten", async () => {
-  const product = await (await j("/api/products", "POST", { name: "Categorie-bank", category: "Meubilair", price: 1000 })).json();
+  const product = await (await j("/api/products", "POST", { name: "Categorie-bank", category: "Test-zitcategorie", price: 1000 })).json();
 
   const initial = await (await j("/api/products/categories")).json();
-  const furniture = initial.find((c) => c.name === "Meubilair");
+  const furniture = initial.find((c) => c.name === "Test-zitcategorie");
   assert.ok(furniture, "product write seeds the managed category vocabulary");
   assert.equal(furniture.product_count, 1);
 
