@@ -130,9 +130,9 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 102. [Completed] Proposal secties als tabel toevoegen.
 103. [Completed] Proposal sectievolgorde beheerbaar maken.
 104. [Completed] Proposal sectie aan/uit toggles.
-105. [Partial] Proposal prijsbijlage genereren. (appendices in PDF wanneer data bestaat)
-106. [Partial] Proposal materiaalstaat genereren. (via appendices)
-107. [Partial] Proposal productbijlage genereren. (via appendices/shoppingsectie)
+105. [Completed] Proposal prijsbijlage genereren. (PDF-appendix met regels en totaal)
+106. [Completed] Proposal materiaalstaat genereren. (PDF-appendix met specificatie en toepassing)
+107. [Completed] Proposal productbijlage genereren. (feature-product appendix)
 108. [Completed] Proposal klantversie en interne versie scheiden. (audience client/internal)
 109. [Completed] Proposal acceptatieknop voorbereiden. (statusflow zet accepted_at)
 110. [Completed] Proposal opmerkingen per sectie opslaan.

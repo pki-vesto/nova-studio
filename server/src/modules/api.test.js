@@ -45,6 +45,11 @@ const j = (path, method, body) => fetch(`${base}${path}`, {
   body: body ? JSON.stringify(body) : undefined
 });
 
+// Hex-encode an ASCII string the way PDFKit writes glyphs inside `<...>` TJ
+// hex strings (lowercase). Used to assert text fragments survive into the
+// uncompressed PDF stream, even though kerning gaps split longer runs.
+const asPdfHex = (s) => Buffer.from(s, "utf8").toString("hex");
+
 function pdfStructure(buffer) {
   const text = buffer.toString("latin1");
   return {
@@ -375,6 +380,27 @@ test("supplier price list import maakt kandidaten en update SKU matches", async 
 
 test("voorstel aanmaken, secties geseed en PDF-export", async () => {
   const project = await (await j("/api/projects", "POST", { title: "Voorstelproject" })).json();
+  db.prepare("INSERT INTO materials (id, project_id, name, spec, application) VALUES (?, ?, ?, ?, ?)")
+    .run("mat_proposal_appendix", project.id, "Marmer Bianco", "Gezoet 20 mm", "Keukenblad");
+  const product = await (await j("/api/products", "POST", {
+    name: "Appendix fauteuil",
+    brand: "Nova Select",
+    category: "Zitmeubel",
+    price: 900,
+    sale_price: 950,
+    sku: "APP-1",
+    dimensions: "82x78x74",
+    lead_time: "6 weken",
+    description: "Linnen bekleding"
+  })).json();
+  await j("/api/products/select", "POST", {
+    project_id: project.id,
+    product_id: product.id,
+    quantity: 2,
+    is_feature: true,
+    designer_note: "Past bij het lichte materiaalpalet"
+  });
+
   const proposal = await (await j("/api/proposals", "POST", { project_id: project.id, title: "Interieurvoorstel" })).json();
   assert.match(proposal.id, /^proposal_/);
   const sections = await (await j(`/api/proposals/${proposal.id}/sections`)).json();
@@ -385,7 +411,16 @@ test("voorstel aanmaken, secties geseed en PDF-export", async () => {
   assert.ok(out.filename.endsWith(".pdf"));
   const onDisk = path.join(process.env.NOVA_EXPORT_DIR, path.basename(out.path));
   assert.ok(fs.existsSync(onDisk), "PDF written to export dir");
-  assert.ok(fs.statSync(onDisk).size > 500, "PDF is non-trivial");
+  const pdf = fs.readFileSync(onDisk);
+  assert.equal(pdf.subarray(0, 4).toString("utf8"), "%PDF");
+  assert.ok(pdf.length > 1000, "PDF is non-trivial");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("Prijs"))), "price appendix title fragment rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("Mater"))), "materials appendix title fragment rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("Appendix"))), "feature product rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("APP"))), "feature product appendix details rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("Mar"))), "material row rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("taal"))), "price appendix total rendered");
+  assert.ok(pdf.includes(Buffer.from(asPdfHex("1900"))), "price appendix line total rendered");
 });
 
 test("proposal PDF visual smoke bewaakt documentstructuur", async () => {
@@ -480,11 +515,6 @@ test("product variant creation records initial price history", async () => {
   assert.equal(history[0].margin, 90);
   assert.equal(history[0].note, "variant_initial");
 });
-
-// Hex-encode an ASCII string the way PDFKit writes glyphs inside `<...>` TJ
-// hex strings (lowercase). Used to assert text fragments survive into the
-// uncompressed PDF stream, even though kerning gaps split longer runs.
-const asPdfHex = (s) => Buffer.from(s, "utf8").toString("hex");
 
 test("projectoverdracht PDF bundelt ruimtes materialen producten en documenten zonder inkoopdata", async () => {
   const project = await (await j("/api/projects", "POST", { title: "Overdrachtproject" })).json();
