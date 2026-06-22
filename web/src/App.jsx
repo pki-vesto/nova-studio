@@ -169,13 +169,20 @@ function CommandPalette({ open, onClose, projects, project, onRun }) {
   if (!open) return null;
 
   const items = [];
-  [...STUDIO_NAV, ...SYSTEM_NAV].forEach((n) => items.push({ label: n.label, hint: "Ga naar", icon: n.icon, run: () => onRun({ kind: "view", view: n.id }) }));
-  if (project) PROJECT_TABS.forEach((t) => items.push({ label: `${project.title} — ${t.label}`, hint: "Tab", icon: t.icon, run: () => onRun({ kind: "tab", tab: t.id }) }));
-  (projects || []).slice(0, 30).forEach((p) => items.push({ label: p.title, hint: p.client_name || "Project", icon: "projects", run: () => onRun({ kind: "open", id: p.id }) }));
+  [...STUDIO_NAV, ...SYSTEM_NAV].forEach((n) => items.push({ label: n.label, group: "Schermen", hint: "Ga naar", icon: n.icon, run: () => onRun({ kind: "view", view: n.id }) }));
+  if (project) PROJECT_TABS.forEach((t) => items.push({ label: `${project.title} — ${t.label}`, group: "Projecttabs", hint: "Tab", icon: t.icon, run: () => onRun({ kind: "tab", tab: t.id }) }));
+  (projects || []).slice(0, 30).forEach((p) => items.push({ label: p.title, group: "Projecten", hint: p.client_name || "Project", icon: "projects", run: () => onRun({ kind: "open", id: p.id }) }));
 
   const ql = q.toLowerCase();
   const list = ql ? items.filter((i) => i.label.toLowerCase().includes(ql) || (i.hint || "").toLowerCase().includes(ql)) : items;
   const clamped = Math.min(sel, Math.max(0, list.length - 1));
+  const grouped = list.reduce((groups, item, index) => {
+    const group = groups.find((g) => g.label === item.group);
+    const entry = { item, index };
+    if (group) group.items.push(entry);
+    else groups.push({ label: item.group, items: [entry] });
+    return groups;
+  }, []);
 
   function onKey(e) {
     if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, list.length - 1)); }
@@ -196,11 +203,16 @@ function CommandPalette({ open, onClose, projects, project, onRun }) {
         </div>
         <div style={{ maxHeight: "52vh", overflow: "auto" }}>
           {list.length === 0 && <div className="caption" style={{ padding: 18 }}>Geen resultaten.</div>}
-          {list.map((it, i) => (
-            <div key={i} className="row middle between" onMouseEnter={() => setSel(i)} onMouseDown={(e) => { e.preventDefault(); it.run(); onClose(); }}
-              style={{ padding: "11px 18px", cursor: "pointer", background: i === clamped ? "var(--surface-2)" : "transparent" }}>
-              <span className="row middle gap2" style={{ minWidth: 0 }}><Icon name={it.icon} size={15} /> <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span></span>
-              <span className="caption" style={{ flex: "none" }}>{it.hint}</span>
+          {grouped.map((group) => (
+            <div key={group.label}>
+              <div className="nav-group-label" style={{ padding: "12px 18px 6px", margin: 0 }}>{group.label}</div>
+              {group.items.map(({ item: it, index: i }) => (
+                <div key={`${group.label}-${i}`} className="row middle between" onMouseEnter={() => setSel(i)} onMouseDown={(e) => { e.preventDefault(); it.run(); onClose(); }}
+                  style={{ padding: "11px 18px", cursor: "pointer", background: i === clamped ? "var(--surface-2)" : "transparent" }}>
+                  <span className="row middle gap2" style={{ minWidth: 0 }}><Icon name={it.icon} size={15} /> <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.label}</span></span>
+                  <span className="caption" style={{ flex: "none" }}>{it.hint}</span>
+                </div>
+              ))}
             </div>
           ))}
         </div>

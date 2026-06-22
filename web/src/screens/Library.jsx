@@ -60,7 +60,7 @@ function PriceHistoryPanel({ productId }) {
   );
 }
 
-function ProductDrawer({ ctx, product, onClose }) {
+function ProductDrawer({ ctx, product, categories, onCategoriesChanged, onClose }) {
   const { loadProjectList, fail } = ctx;
   const editing = !!product;
   const [form, setForm] = useState({
@@ -83,6 +83,7 @@ function ProductDrawer({ ctx, product, onClose }) {
       if (editing) await api.form(`/api/products/${product.id}`, fd, "PUT");
       else await api.form("/api/products", fd);
       await loadProjectList();
+      await onCategoriesChanged();
       onClose();
     } catch (err) { fail(err); setSaving(false); }
   }
@@ -95,7 +96,12 @@ function ProductDrawer({ ctx, product, onClose }) {
           <Field label="Merk"><input value={form.brand} onChange={set("brand")} placeholder="&Tradition" /></Field>
           <Field label="Ontwerper"><input value={form.designer} onChange={set("designer")} placeholder="Edward van Vliet" /></Field>
           <Field label="Leverancier"><input value={form.supplier} onChange={set("supplier")} placeholder="Studio Lijn, Amsterdam" /></Field>
-          <Field label="Categorie"><input value={form.category} onChange={set("category")} placeholder="Meubilair" /></Field>
+          <Field label="Categorie">
+            <select value={form.category} onChange={set("category")}>
+              <option value="">Geen categorie</option>
+              {categories.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
+          </Field>
         </div>
         <div className="form-grid form-grid-2">
           <Field label="Richtprijs (€)"><input type="number" step="0.01" value={form.price} onChange={set("price")} placeholder="4890" /></Field>
@@ -111,11 +117,83 @@ function ProductDrawer({ ctx, product, onClose }) {
   );
 }
 
+function CategoryManager({ categories, reload, fail }) {
+  const [name, setName] = useState("");
+  const [drafts, setDrafts] = useState({});
+  const draftFor = (c) => drafts[c.id] ?? c.name;
+
+  async function createCategory() {
+    const clean = name.trim();
+    if (!clean) return;
+    try {
+      await api.json("/api/products/categories", "POST", { name: clean });
+      setName("");
+      await reload();
+    } catch (err) { fail(err); }
+  }
+
+  async function renameCategory(c) {
+    const next = draftFor(c).trim();
+    if (!next || next === c.name) return;
+    try {
+      await api.json(`/api/products/categories/${c.id}`, "PUT", { name: next });
+      await reload();
+    } catch (err) { fail(err); }
+  }
+
+  async function deleteCategory(c) {
+    try {
+      await api.del(`/api/products/categories/${c.id}`);
+      await reload();
+    } catch (err) { fail(err); }
+  }
+
+  return (
+    <section className="card" style={{ padding: 20, marginBottom: 30 }}>
+      <div className="row between middle wrap" style={{ gap: 14, marginBottom: 16 }}>
+        <div>
+          <Kicker style={{ marginBottom: 6 }}>Categoriebeheer</Kicker>
+          <p className="caption" style={{ margin: 0, color: "var(--ink-2)" }}>Beheer het vaste vocabularium voor productfilters en productinvoer.</p>
+        </div>
+        <div className="row gap2 middle" style={{ flex: "1 1 280px", justifyContent: "flex-end" }}>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nieuwe categorie" style={{ maxWidth: 220 }} />
+          <button className="btn btn-primary" onClick={createCategory}><Icon name="plus" size={14} /> Voeg toe</button>
+        </div>
+      </div>
+      {categories.length === 0 ? (
+        <p className="caption" style={{ margin: 0, color: "var(--muted)" }}>Nog geen categorieën.</p>
+      ) : (
+        <div className="grid grid-3" style={{ gap: 12 }}>
+          {categories.map((c) => (
+            <div key={c.id} style={{ border: "1px solid var(--line)", borderRadius: "var(--r-sm)", padding: 12, background: "var(--paper)" }}>
+              <div className="row gap2 middle">
+                <input value={draftFor(c)} onChange={(e) => setDrafts((d) => ({ ...d, [c.id]: e.target.value }))} />
+                <button className="btn btn-ghost" style={{ padding: "6px 9px" }} onClick={() => renameCategory(c)}><Icon name="check" size={13} /></button>
+                <button className="btn btn-danger" style={{ padding: "6px 9px" }} onClick={() => deleteCategory(c)}><Icon name="trash" size={13} /></button>
+              </div>
+              <div className="caption" style={{ marginTop: 8, color: "var(--ink-2)" }}>{c.product_count || 0} producten</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function Library({ ctx }) {
   const { libraryProducts, loadProjectList, fail, query } = ctx;
   const [cat, setCat] = useState("Alle");
   const [drawer, setDrawer] = useState(null); // null | {} | product
-  const cats = ["Alle", ...Array.from(new Set(libraryProducts.map((p) => p.category).filter(Boolean)))];
+  const [categories, setCategories] = useState([]);
+  async function loadCategories() {
+    try { setCategories(await api.get("/api/products/categories")); }
+    catch (err) { fail(err); }
+  }
+  useEffect(() => { loadCategories(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (cat !== "Alle" && !categories.some((c) => c.name === cat)) setCat("Alle");
+  }, [cat, categories]);
+  const cats = ["Alle", ...categories.map((c) => c.name)];
   const q = (query || "").toLowerCase();
   const list = libraryProducts.filter((p) =>
     (cat === "Alle" || p.category === cat) &&
@@ -130,6 +208,8 @@ export function Library({ ctx }) {
         <div><Kicker style={{ marginBottom: 14 }}>Nova Studio — Bronnen</Kicker><h1 className="page-title">Productbibliotheek</h1></div>
         <button className="btn btn-primary btn-lg" onClick={() => setDrawer({})}><Icon name="plus" size={16} /> Product toevoegen</button>
       </div>
+
+      <CategoryManager categories={categories} reload={async () => { await loadProjectList(); await loadCategories(); }} fail={fail} />
 
       {libraryProducts.length === 0 ? (
         <div className="empty"><p className="body" style={{ margin: 0 }}>Nog geen producten. Voeg herbruikbare stukken toe — ze verschijnen hier en zijn te selecteren in elk project.</p>
@@ -165,7 +245,7 @@ export function Library({ ctx }) {
         </>
       )}
 
-      {drawer && <ProductDrawer ctx={ctx} product={drawer.id ? drawer : null} onClose={() => setDrawer(null)} />}
+      {drawer && <ProductDrawer ctx={ctx} product={drawer.id ? drawer : null} categories={categories} onCategoriesChanged={loadCategories} onClose={() => setDrawer(null)} />}
     </div>
   );
 }

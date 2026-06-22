@@ -29,18 +29,24 @@ export function Tag({ children, variant }) {
   return <span className={cls}>{children}</span>;
 }
 
+export const PROJECT_STATUS_MODEL = [
+  { key: "lead", label: "Lead", description: "Nieuwe aanvraag of intake, nog zonder uitgewerkt voorstel." },
+  { key: "proposal", label: "Voorstel", description: "Ontwerp- en prijsvoorstel wordt samengesteld of besproken." },
+  { key: "approved", label: "Goedgekeurd", description: "Klant heeft akkoord gegeven; planning en inkoop kunnen starten." },
+  { key: "active", label: "In uitvoering", description: "Project loopt: uitvoering, selectie en coordinatie zijn actief." },
+  { key: "completed", label: "Opgeleverd", description: "Werk is afgerond en overdracht of nazorg blijft over." },
+  { key: "archived", label: "Archief", description: "Niet meer actief in de dagelijkse projectlijst." }
+];
+
 // Maps both the editorial labels and the backend status codes to a dot colour.
-const STATUS_COLORS = {
+export const STATUS_COLORS = {
   "Voorstel": "var(--clay)", proposal: "var(--clay)",
   "In uitvoering": "var(--sage)", active: "var(--sage)",
   "Opgeleverd": "var(--muted-2)", completed: "var(--muted-2)",
   "Intake": "var(--ink-2)", lead: "var(--ink-2)",
   approved: "var(--sage)", archived: "var(--muted-2)"
 };
-const STATUS_LABELS = {
-  lead: "Lead", active: "In uitvoering", proposal: "Voorstel",
-  approved: "Goedgekeurd", completed: "Opgeleverd", archived: "Archief"
-};
+const STATUS_LABELS = Object.fromEntries(PROJECT_STATUS_MODEL.map((s) => [s.key, s.label]));
 export function statusLabel(status) {
   return STATUS_LABELS[status] || status || "—";
 }
