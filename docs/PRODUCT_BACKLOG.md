@@ -219,7 +219,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 191. [Completed] Accessibility audit uitvoeren. (`docs/ACCESSIBILITY_AUDIT.md`)
 192. [Completed] Mobile responsive polish. (compacte mobile shell/topbar, scrollbare acties/projecttabs, stacked page-heads/drawers/buttons en responsive Project Overview hero/spec/columns)
 193. [Partial] Desktop screenshot regressietest. (headless Firefox smoke-harness met host capability probe; echte capture draait waar Firefox screenshots ondersteunt)
-194. [Partial] Print CSS uitbreiden.
+194. [Completed] Print CSS uitbreiden. (A4-browserprint voor proposalpagina's met page breaks, verborgen app-chrome, printkleurbehoud en printveilige documentsecties)
 195. [Completed] PDF visual regression smoke-test. (dependency-free proposal PDF structure smoke validates header/trailer, A4 pages, page count, catalog and font resources)
 196. [Completed] Form validatie uniformeren met zod. (gecentraliseerd in `validate.js`, `validateBody`/`validateForm` op vrijwel alle write-endpoints; projects/auth via eigen inline zod met hetzelfde foutcontract)
 197. [Completed] API error format standaardiseren. (één envelope `{ error, details? }`, globale handler mapt ZodError→400/multer→413/`err.status`)

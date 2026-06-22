@@ -454,9 +454,69 @@ a{ color: inherit; text-decoration: none; }
 
 /* print: proposal document (from design HTML head) */
 @media print {
+  @page{ size:A4; margin:14mm; }
+  html, body{
+    background:#fff !important;
+    color:#211d18 !important;
+    overflow:visible !important;
+  }
+  body{
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
   .side, .topbar, .proj-nav, .tweaks-panel, [data-tweaks-toggle], .no-print { display:none !important; }
-  .app { display:block; }
-  .content { max-width:none; padding:0; }
+  .app, .main{
+    display:block !important;
+    min-height:auto !important;
+  }
+  .content{
+    max-width:none !important;
+    width:100% !important;
+    padding:0 !important;
+    margin:0 !important;
+  }
+  .card{ box-shadow:none !important; }
+  .doc-page{
+    background:#fff !important;
+    color:#211d18 !important;
+    border:1px solid #d8cec0 !important;
+    border-radius:0 !important;
+    box-shadow:none !important;
+    overflow:visible !important;
+    padding:14mm !important;
+    margin:0 0 12mm !important;
+    min-height:240mm;
+    break-inside:avoid;
+    page-break-inside:avoid;
+  }
+  .doc-page + .doc-page{
+    break-before:page;
+    page-break-before:always;
+  }
+  .doc-page-dark{
+    background:#211d18 !important;
+    color:#fbf8f2 !important;
+    border-color:#211d18 !important;
+  }
+  .doc-page .display,
+  .doc-page .body,
+  .doc-page .serif,
+  .doc-page .caption,
+  .doc-page .mono,
+  .doc-page .eyebrow,
+  .doc-page .kicker{ color:inherit; }
+  .doc-page .ph,
+  .doc-page .swatch-chip{
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
+  .doc-page .row,
+  .doc-page .spec-row,
+  .doc-page li{
+    break-inside:avoid;
+    page-break-inside:avoid;
+  }
+  a{ text-decoration:none; }
 }
 
 /* Responsive */

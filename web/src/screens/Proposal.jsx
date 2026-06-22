@@ -9,7 +9,7 @@ import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
 function DocPage({ children, label, n, dark }) {
   return (
-    <section style={{ background: dark ? "var(--surface-ink)" : "var(--surface)", color: dark ? "var(--surface)" : "var(--ink)",
+    <section className={`doc-page ${dark ? "doc-page-dark" : ""}`} style={{ background: dark ? "var(--surface-ink)" : "var(--surface)", color: dark ? "var(--surface)" : "var(--ink)",
       borderRadius: "var(--r-lg)", border: "1px solid " + (dark ? "var(--line-ink)" : "var(--line)"), overflow: "hidden",
       padding: "clamp(36px,5vw,72px)", position: "relative", marginBottom: 28 }}>
       {label && (
