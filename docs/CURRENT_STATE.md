@@ -102,7 +102,7 @@ Live staat: 0 suppliers.
 
 ### Design Library
 
-Werkt: **`design_library`** voor herbruikbare concepten, room-templates, product-/materiaalsets en proposal-snippets (`kind`, `data_json`, `tags`, beeld, herkomst-project). CRUD + image upload, **promote** vanuit moodboard. UI in `DesignLibraryScreen.jsx`. Projecttemplates (`is_template`/`template_name`) blijven los hiervan bestaan.
+Werkt: **`design_library`** voor herbruikbare concepten, room-templates, product-/materiaalsets en proposal-snippets (`kind`, `data_json`, `tags`, beeld, herkomst-project). CRUD + image upload, **promote** vanuit moodboard en actieve projectshopping/-materialen opslaan als `product_set`/`material_set`. UI in `DesignLibraryScreen.jsx`. Projecttemplates (`is_template`/`template_name`) blijven los hiervan bestaan.
 
 Getest: geen.
 
