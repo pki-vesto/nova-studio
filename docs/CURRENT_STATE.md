@@ -118,7 +118,7 @@ Live staat: 0 proposals.
 
 ### Presentation (configureerbare pagina's, presenter notes, klantmodus)
 
-Werkt: fullscreen presentatie met pagina's uit projectdata, moodboard-assets, materiaal-/productpagina's, budgetblok, keyboard-navigatie, dots, auto-hide chrome. Configureerbare paginavolgorde, presenter notes en een klantmodus zonder edit-chrome in `Presentation.jsx`.
+Werkt: fullscreen presentatie met pagina's uit projectdata, moodboard-assets, materiaal-/productpagina's, budgetblok, keyboard-navigatie, dots, auto-hide chrome. Configureerbare paginavolgorde, presenter notes en een klantmodus zonder edit-chrome in `Presentation.jsx`. PDF-export is bewust niet als aparte slide-export uitgevoerd: proposal-PDF is het printbare klant/interne artefact en houdt appendices plus exportgeschiedenis bij elkaar.
 
 Getest: geen frontendtest.
 
