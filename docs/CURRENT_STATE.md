@@ -54,7 +54,7 @@ Live staat: 0 rooms in lokale DB.
 
 ### Floorplans (schaal/objecten/lagen/versies)
 
-Werkt: floorplan aanmaken met upload of SVG-tekening, bewerken na aanmaak, verwijderen. **Schaal** (`scale_ratio`/`scale_unit`), **vector-objecten** op **lagen** (`floorplan_objects`: walls/meubels/annotaties, CRUD per object), **product/materiaal-koppeling** per object (`product_id`/`material_id`, FK met ON DELETE SET NULL; gekoppelde naam wordt geresolveerd in de objects-GET), **versiebeheer** (`/:id/new-version` kloont de plattegrond + objecten incl. koppelingen), thumbnail-veld.
+Werkt: floorplan aanmaken met upload of SVG-tekening, bewerken na aanmaak, verwijderen. Geuploade beelden/PDF-thumbnails ondersteunen fit, crop-positie en zoom via `drawing_json.image`. **Schaal** (`scale_ratio`/`scale_unit`), **vector-objecten** op **lagen** (`floorplan_objects`: walls/meubels/annotaties, CRUD per object), **product/materiaal-koppeling** per object (`product_id`/`material_id`, FK met ON DELETE SET NULL; gekoppelde naam wordt geresolveerd in de objects-GET), **versiebeheer** (`/:id/new-version` kloont de plattegrond + objecten incl. koppelingen), thumbnail-veld.
 
 Getest: geen.
 

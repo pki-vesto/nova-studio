@@ -155,7 +155,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 127. [Completed] Floorplan versiebeheer.
 128. [Partial] Floorplan annotaties per ruimte. (annotatie-laag; geen room-scoping per annotatie)
 129. [Partial] Floorplan PDF upload thumbnail. (thumb_path-veld; geen server-side generatie)
-130. [Not Started] Floorplan image crop/fit controls.
+130. [Completed] Floorplan image crop/fit controls. (`drawing_json.image` fit/positie/zoom)
 131. [Completed] Product inkoopprijs toevoegen.
 132. [Completed] Product verkoopprijs en marge toevoegen.
 133. [Completed] Product btw-percentage toevoegen.
