@@ -4,6 +4,7 @@ const { id } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { validateBody, validateForm, z } = require("./validate");
 const { record } = require("./audit");
+const { safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -96,6 +97,21 @@ function recordPriceHistory(productId, prices, note) {
   } catch {
     // Never break the primary write.
   }
+}
+
+function promoteProduct(row) {
+  if (!row) return;
+  safePromote("product", row.id, row.name, {
+    name: row.name || "",
+    brand: row.brand || "",
+    supplier: row.supplier || "",
+    supplier_id: row.supplier_id || "",
+    category: row.category || "",
+    collection: row.collection || "",
+    sku: row.sku || "",
+    status: row.status || "",
+    availability_status: row.availability_status || ""
+  });
 }
 
 // Quote a single CSV cell: wrap in quotes and double inner quotes when it
@@ -195,7 +211,9 @@ router.post("/", upload.single("image"), validateForm(productSchema), (req, res)
     sale_price: salePrice,
     price: Number(req.body.price || 0)
   }, "initial");
-  res.status(201).json(db.prepare("SELECT * FROM products WHERE id = ?").get(productId));
+  const product = db.prepare("SELECT * FROM products WHERE id = ?").get(productId);
+  promoteProduct(product);
+  res.status(201).json(product);
 });
 
 router.put("/:id", upload.single("image"), validateForm(productSchema, { partial: true }), (req, res) => {
@@ -283,7 +301,9 @@ router.put("/:id", upload.single("image"), validateForm(productSchema, { partial
       to: { purchase_price: purchasePrice, sale_price: salePrice, price: newPrice }
     }));
   }
-  res.json(db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id));
+  const product = db.prepare("SELECT * FROM products WHERE id = ?").get(req.params.id);
+  promoteProduct(product);
+  res.json(product);
 });
 
 router.delete("/:id", (req, res) => {
