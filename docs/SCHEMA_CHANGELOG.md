@@ -26,6 +26,7 @@ Geregistreerd in `schema_migrations` als **`2026-06-09-platform-expansion`**.
 
 **Schema governance**
 - `schema_migrations` — genummerde, geregistreerde migratiestappen (`name`, `applied_at`).
+- `intake_questionnaire` — configureerbare intakevragen (label, placeholder, type, volgorde, aan/uit).
 
 **Auth / multi-user (single-user blijft default)**
 - `studios` — studio's/organisaties (geseed met `studio_default`).

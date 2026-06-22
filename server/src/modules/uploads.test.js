@@ -77,3 +77,21 @@ test("upload route rejects client-supplied URL, path-traversal and alternate des
   }
   assert.deepEqual(uploadedFiles(), before, "rejected uploads do not write files");
 });
+
+test("upload route rejects unsafe multipart filenames before writing files", async () => {
+  const before = uploadedFiles();
+  const unsafeNames = [
+    "../floorplan.png",
+    "..\\floorplan.png",
+    "nested/floorplan.png",
+    "https://evil.example/floorplan.png"
+  ];
+
+  for (const name of unsafeNames) {
+    const res = await postUpload(name);
+    assert.equal(res.status, 400, `${name} rejected`);
+    assert.deepEqual(await res.json(), { error: "Ongeldige bestandsnaam" });
+  }
+
+  assert.deepEqual(uploadedFiles(), before, "unsafe filenames do not write files");
+});

@@ -5,6 +5,8 @@ const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { seedSampleProject } = require("./seed");
 const { stampOwnership, visibleProjectWhere } = require("./authorization");
+const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
+const { safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
 
@@ -57,11 +59,38 @@ function scopedProject(req, projectId) {
   return db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: projectId, ...scope.params });
 }
 
+function promoteProject(row) {
+  if (!row) return;
+  safePromote("project", row.id, row.title, {
+    title: row.title || "",
+    status: row.status || "",
+    client_id: row.client_id || "",
+    project_type: row.project_type || "",
+    style: row.style || ""
+  });
+}
+
 router.get("/", (req, res) => {
   const q = `%${req.query.q || ""}%`;
   const status = req.query.status || "";
   const templates = req.query.templates === "1";
   const scope = visibleProjectWhere(req, "p");
+  const paged = hasPagination(req.query);
+  const page = parsePagination(req.query);
+  const params = { q, status, is_template: templates ? 1 : 0, ...scope.params, ...page };
+  if (paged) {
+    const total = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM projects p
+      LEFT JOIN clients c ON c.id = p.client_id
+      WHERE (p.title LIKE @q OR c.name LIKE @q OR p.address LIKE @q)
+        AND (@status = '' OR p.status = @status)
+        AND p.is_template = @is_template
+        AND (p.deleted_at IS NULL OR p.deleted_at = '')
+        AND ${scope.sql}
+    `).get(params).total;
+    setPaginationHeaders(res, { total, ...page });
+  }
   const projects = db.prepare(`
     SELECT p.*, c.name AS client_name
     FROM projects p
@@ -72,7 +101,8 @@ router.get("/", (req, res) => {
       AND (p.deleted_at IS NULL OR p.deleted_at = '')
       AND ${scope.sql}
     ORDER BY p.updated_at DESC
-  `).all({ q, status, is_template: templates ? 1 : 0, ...scope.params });
+    ${paginationSql(paged)}
+  `).all(params);
   res.json(projects);
 });
 
@@ -114,10 +144,12 @@ router.post("/", (req, res) => {
     db.prepare("INSERT INTO intake (project_id) VALUES (?)").run(projectId);
   });
   tx();
-  res.status(201).json(hydrateProject(db.prepare(`
+  const project = db.prepare(`
     SELECT p.*, c.name AS client_name, c.email AS client_email, c.phone AS client_phone
     FROM projects p LEFT JOIN clients c ON c.id = p.client_id WHERE p.id = ?
-  `).get(projectId)));
+  `).get(projectId);
+  promoteProject(project);
+  res.status(201).json(hydrateProject(project));
 });
 
 router.get("/:id", (req, res) => {
@@ -167,7 +199,9 @@ router.put("/:id", (req, res) => {
     db.prepare(`UPDATE projects SET ${set.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = @id`).run(params);
   }
   const scope = visibleProjectWhere(req, "p");
-  res.json(hydrateProject(db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params })));
+  const project = db.prepare(`SELECT p.* FROM projects p WHERE p.id = @id AND ${scope.sql}`).get({ id: req.params.id, ...scope.params });
+  promoteProject(project);
+  res.json(hydrateProject(project));
 });
 
 // Cover/hero image for the editorial proposal + presentation.
