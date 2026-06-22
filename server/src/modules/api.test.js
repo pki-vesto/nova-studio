@@ -102,6 +102,35 @@ test("productselectie en shoppinglijst totaal", async () => {
   assert.equal(shopping.total, 2000, "2 × €1000");
 });
 
+test("list endpoints support opt-in limit offset pagination headers", async () => {
+  await j("/api/projects", "POST", { title: "Paged Project A" });
+  await j("/api/projects", "POST", { title: "Paged Project B" });
+  await j("/api/projects", "POST", { title: "Paged Project C" });
+  await j("/api/products", "POST", { name: "Paged Product A", price: 10 });
+  await j("/api/products", "POST", { name: "Paged Product B", price: 20 });
+  await j("/api/products", "POST", { name: "Paged Product C", price: 30 });
+
+  const legacyProjects = await (await j("/api/projects?status=&q=Paged")).json();
+  assert.equal(Array.isArray(legacyProjects), true, "legacy projects response remains an array");
+  assert.equal(legacyProjects.length, 3);
+
+  const pagedProjectsRes = await j("/api/projects?status=&q=Paged&limit=2&offset=1");
+  assert.equal(pagedProjectsRes.status, 200);
+  const pagedProjects = await pagedProjectsRes.json();
+  assert.equal(pagedProjects.length, 2);
+  assert.equal(pagedProjectsRes.headers.get("x-total-count"), "3");
+  assert.equal(pagedProjectsRes.headers.get("x-limit"), "2");
+  assert.equal(pagedProjectsRes.headers.get("x-offset"), "1");
+
+  const pagedProductsRes = await j("/api/products?limit=2&offset=1");
+  assert.equal(pagedProductsRes.status, 200);
+  const pagedProducts = await pagedProductsRes.json();
+  assert.equal(pagedProducts.length, 2);
+  assert.ok(Number(pagedProductsRes.headers.get("x-total-count")) >= 3);
+  assert.equal(pagedProductsRes.headers.get("x-limit"), "2");
+  assert.equal(pagedProductsRes.headers.get("x-offset"), "1");
+});
+
 test("productcategorieen beheren en toepassen op producten", async () => {
   const product = await (await j("/api/products", "POST", { name: "Categorie-bank", category: "Meubilair", price: 1000 })).json();
 

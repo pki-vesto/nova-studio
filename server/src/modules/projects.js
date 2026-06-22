@@ -5,6 +5,7 @@ const { id, parseJson, uploadUrl } = require("./utils");
 const { upload, removeUpload } = require("./uploads");
 const { seedSampleProject } = require("./seed");
 const { stampOwnership, visibleProjectWhere } = require("./authorization");
+const { hasPagination, parsePagination, paginationSql, setPaginationHeaders } = require("./pagination");
 const { safePromote } = require("./knowledgeSync");
 
 const router = express.Router();
@@ -74,6 +75,22 @@ router.get("/", (req, res) => {
   const status = req.query.status || "";
   const templates = req.query.templates === "1";
   const scope = visibleProjectWhere(req, "p");
+  const paged = hasPagination(req.query);
+  const page = parsePagination(req.query);
+  const params = { q, status, is_template: templates ? 1 : 0, ...scope.params, ...page };
+  if (paged) {
+    const total = db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM projects p
+      LEFT JOIN clients c ON c.id = p.client_id
+      WHERE (p.title LIKE @q OR c.name LIKE @q OR p.address LIKE @q)
+        AND (@status = '' OR p.status = @status)
+        AND p.is_template = @is_template
+        AND (p.deleted_at IS NULL OR p.deleted_at = '')
+        AND ${scope.sql}
+    `).get(params).total;
+    setPaginationHeaders(res, { total, ...page });
+  }
   const projects = db.prepare(`
     SELECT p.*, c.name AS client_name
     FROM projects p
@@ -84,7 +101,8 @@ router.get("/", (req, res) => {
       AND (p.deleted_at IS NULL OR p.deleted_at = '')
       AND ${scope.sql}
     ORDER BY p.updated_at DESC
-  `).all({ q, status, is_template: templates ? 1 : 0, ...scope.params });
+    ${paginationSql(paged)}
+  `).all(params);
   res.json(projects);
 });
 
