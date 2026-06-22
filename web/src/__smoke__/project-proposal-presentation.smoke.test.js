@@ -237,6 +237,13 @@ test("project to proposal flow renders the proposal document and opens presentat
   await waitFor(() => state.calls.includes("GET /api/projects/smoke-project"), `created project detail load; calls=${state.calls.join(" | ")}`);
   await waitFor(() => byText(document, "Smoke Suite"), "opened project title");
 
+  await React.act(async () => click(byText(document, "Projecten", ".nav-item")));
+  await waitFor(() => byText(document, "Projectlevenscyclus"), "project status model panel");
+  assert.ok(byText(document, "Klant heeft akkoord gegeven; planning en inkoop kunnen starten."), "status model explains approved state");
+
+  await React.act(async () => click(byText(document, "Smoke Suite", "h3")));
+  await waitFor(() => byText(document, "Presenteer voorstel", "button"), "reopened project detail");
+
   await React.act(async () => click(byText(document, "Voorstel", ".proj-tab")));
   await waitFor(() => byText(document, "Voorstel — bladerbaar document"), "proposal tab");
   assert.ok(byText(document, "Ontwerpvoorstel"), "proposal cover is visible");

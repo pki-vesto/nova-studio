@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
-import { Ph, Kicker, Tag, EditButton, statusLabel } from "../components/primitives.jsx";
+import { Ph, Kicker, PROJECT_STATUS_MODEL, Tag, EditButton, statusLabel } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
 function MetaDrawer({ ctx, onClose }) {
@@ -53,7 +53,7 @@ function MetaDrawer({ ctx, onClose }) {
         <div className="form-grid form-grid-2">
           <Field label="Status">
             <select value={form.status} onChange={set("status")}>
-              {["lead", "proposal", "active", "approved", "completed", "archived"].map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
+              {PROJECT_STATUS_MODEL.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </Field>
           <Field label="Stijlrichting"><input value={form.style} onChange={set("style")} placeholder="Warm minimalisme" /></Field>

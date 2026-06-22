@@ -1,16 +1,10 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
-import { Ph, Kicker, StatusDot } from "../components/primitives.jsx";
+import { Ph, Kicker, PROJECT_STATUS_MODEL, StatusDot } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
-const FILTERS = [
-  { key: "alle", label: "Alle" },
-  { key: "lead", label: "Lead" },
-  { key: "proposal", label: "Voorstel" },
-  { key: "active", label: "In uitvoering" },
-  { key: "completed", label: "Opgeleverd" }
-];
+const FILTERS = [{ key: "alle", label: "Alle" }, ...PROJECT_STATUS_MODEL.filter((s) => s.key !== "archived")];
 
 function NewProjectDrawer({ ctx, template = false, onSaved, onClose }) {
   const { clients, loadProjectList, openProject, fail } = ctx;
@@ -53,11 +47,9 @@ function NewProjectDrawer({ ctx, template = false, onSaved, onClose }) {
         <Field label="Locatie"><input value={form.address} onChange={set("address")} placeholder="Amsterdam — Grachtengordel" /></Field>
         <Field label="Status">
           <select value={form.status} onChange={set("status")}>
-            <option value="lead">Lead</option>
-            <option value="proposal">Voorstel</option>
-            <option value="active">In uitvoering</option>
-            <option value="approved">Goedgekeurd</option>
-            <option value="completed">Opgeleverd</option>
+            {PROJECT_STATUS_MODEL.filter((s) => s.key !== "archived").map((s) => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
           </select>
         </Field>
       </div>
@@ -159,6 +151,24 @@ export function ProjectsIndex({ ctx }) {
               </button>
             </p>
           )}
+
+          <section className="card" style={{ padding: 24, marginBottom: 32 }}>
+            <div className="row between middle wrap" style={{ gap: 16, marginBottom: 18 }}>
+              <div>
+                <Kicker style={{ marginBottom: 8 }}>Statusmodel</Kicker>
+                <h2 className="serif" style={{ fontSize: 24, margin: 0 }}>Projectlevenscyclus</h2>
+              </div>
+              <span className="caption">Lead → Voorstel → Goedgekeurd → In uitvoering → Opgeleverd</span>
+            </div>
+            <div className="grid grid-3" style={{ gap: 14 }}>
+              {PROJECT_STATUS_MODEL.filter((s) => s.key !== "archived").map((s) => (
+                <div key={s.key} style={{ padding: 14, border: "1px solid var(--line)", borderRadius: "var(--r-sm)", background: "var(--paper)" }}>
+                  <StatusDot status={s.key} />
+                  <p className="caption" style={{ margin: "8px 0 0", color: "var(--ink-2)", lineHeight: 1.5 }}>{s.description}</p>
+                </div>
+              ))}
+            </div>
+          </section>
 
           <div className="grid grid-3">
             {list.map((p, i) => (
