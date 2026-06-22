@@ -220,7 +220,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 192. [Partial] Mobile responsive polish.
 193. [Not Started] Desktop screenshot regressietest.
 194. [Partial] Print CSS uitbreiden.
-195. [Not Started] PDF visual regression smoke-test.
+195. [Completed] PDF visual regression smoke-test. (dependency-free proposal PDF structure smoke validates header/trailer, A4 pages, page count, catalog and font resources)
 196. [Completed] Form validatie uniformeren met zod. (gecentraliseerd in `validate.js`, `validateBody`/`validateForm` op vrijwel alle write-endpoints; projects/auth via eigen inline zod met hetzelfde foutcontract)
 197. [Completed] API error format standaardiseren. (één envelope `{ error, details? }`, globale handler mapt ZodError→400/multer→413/`err.status`)
 198. [Not Started] API pagination voorbereiden.
