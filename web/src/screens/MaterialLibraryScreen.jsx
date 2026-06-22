@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
-import { Ph, Kicker } from "../components/primitives.jsx";
+import { EmptyState, InlineError, Ph, Kicker } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
 function MaterialDrawer({ ctx, material, onReload, onClose }) {
@@ -129,7 +129,7 @@ function SampleGroupCard({ kind, rows, dim, defaultOpen }) {
 
 function SampleOverviewPanel({ fail }) {
   const [data, setData] = useState(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -138,25 +138,24 @@ function SampleOverviewPanel({ fail }) {
         const result = await api.get("/api/materials/sample-overview");
         if (!cancelled) setData(result);
       } catch (err) {
-        if (!cancelled) setError(true);
+        if (!cancelled) setError(err?.message || String(err));
         fail(err);
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  if (error) return <p className="caption">Sample-overzicht kon niet geladen worden.</p>;
+  if (error) return <InlineError title="Sample-overzicht kon niet worden geladen" body={error} />;
   if (!data) return <p className="caption">Sample-overzicht laden…</p>;
 
   const counts = data.counts || { requested: 0, none: 0, received: 0 };
   const total = counts.requested + counts.none + counts.received;
   if (total === 0) {
     return (
-      <div className="empty">
-        <p className="body" style={{ margin: 0 }}>
-          Nog geen projectmaterialen met sample-status. Voeg materialen toe in een project om hier overzicht te krijgen.
-        </p>
-      </div>
+      <EmptyState
+        title="Nog geen sample-statussen"
+        body="Voeg projectmaterialen toe en markeer samples als aangevraagd of ontvangen om hier de cross-project planning te zien."
+      />
     );
   }
 
@@ -176,11 +175,18 @@ export function MaterialLibraryScreen({ ctx }) {
   const { fail } = ctx;
   const [materials, setMaterials] = useState([]);
   const [cat, setCat] = useState("Alle");
+  const [loadError, setLoadError] = useState("");
   const [drawer, setDrawer] = useState(null); // null | {} | material
   const [tab, setTab] = useState("library"); // "library" | "samples"
 
   async function load() {
-    try { setMaterials(await api.get("/api/material-library")); } catch (err) { fail(err); }
+    setLoadError("");
+    try { setMaterials(await api.get("/api/material-library")); }
+    catch (err) {
+      const message = err?.message || String(err);
+      setLoadError(message);
+      fail(err);
+    }
   }
   useEffect(() => { load(); }, []);
 
@@ -211,10 +217,18 @@ export function MaterialLibraryScreen({ ctx }) {
 
       {tab === "samples" ? (
         <SampleOverviewPanel fail={fail} />
+      ) : loadError ? (
+        <InlineError
+          title="Materiaalbibliotheek kon niet worden geladen"
+          body={loadError}
+          action={<button className="btn btn-ghost" onClick={load}>Opnieuw proberen</button>}
+        />
       ) : materials.length === 0 ? (
-        <div className="empty"><p className="body" style={{ margin: 0 }}>Nog geen materialen. Voeg stalen toe — ze verschijnen hier en zijn beschikbaar in elk project.</p>
-          <button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Eerste materiaal</button>
-        </div>
+        <EmptyState
+          title="Nog geen materialen"
+          body="Voeg stalen toe aan de globale bibliotheek. Daarna zijn ze beschikbaar om in projecten over te nemen."
+          action={<button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Eerste materiaal</button>}
+        />
       ) : (
         <>
           <div className="row between middle wrap" style={{ gap: 16, marginBottom: 36 }}>
@@ -223,8 +237,15 @@ export function MaterialLibraryScreen({ ctx }) {
             </div>
             <span className="caption">{list.length} materialen</span>
           </div>
-          <div className="grid grid-3">
-            {list.map((m) => (
+          {list.length === 0 ? (
+            <EmptyState
+              title="Geen materialen in deze categorie"
+              body="Kies een andere categorie of voeg een materiaal met deze categorie toe."
+              action={<button className="btn btn-clay" onClick={() => setDrawer({})}><Icon name="plus" size={15} /> Materiaal toevoegen</button>}
+            />
+          ) : (
+            <div className="grid grid-3">
+              {list.map((m) => (
               <article key={m.id} className="card" style={{ overflow: "hidden" }}>
                 <Ph label={`${m.name} — staal`} src={m.image_path} icon="palette" style={{ aspectRatio: "1/1" }} />
                 <div style={{ padding: "16px 18px 18px" }}>
@@ -241,8 +262,9 @@ export function MaterialLibraryScreen({ ctx }) {
                   </div>
                 </div>
               </article>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 
