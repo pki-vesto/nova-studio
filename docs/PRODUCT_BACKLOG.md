@@ -121,7 +121,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 96. [Completed] Materialen sorteren vanuit UI.
 97. [Completed] Room sortering beheerbaar maken.
 98. [Completed] Floorplan bewerken na aanmaak.
-99. [Partial] Floorplan image/PDF preview verbeteren. (thumbnail-veld + weergave; geen server-side PDF-thumb-generatie)
+99. [Completed] Floorplan image/PDF preview verbeteren. (server-side PDF-thumbnail met SVG-fallback en UI-preview)
 100. [Completed] Moodboard bewerken na aanmaak.
 
 ## V2
@@ -154,7 +154,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 126. [Completed] Floorplan laagmodel voor muren, meubels en annotaties.
 127. [Completed] Floorplan versiebeheer.
 128. [Partial] Floorplan annotaties per ruimte. (annotatie-laag; geen room-scoping per annotatie)
-129. [Partial] Floorplan PDF upload thumbnail. (thumb_path-veld; geen server-side generatie)
+129. [Completed] Floorplan PDF upload thumbnail. (server-side PDF-thumbnail met SVG-fallback)
 130. [Completed] Floorplan image crop/fit controls. (`drawing_json.image` fit/positie/zoom)
 131. [Completed] Product inkoopprijs toevoegen.
 132. [Completed] Product verkoopprijs en marge toevoegen.
