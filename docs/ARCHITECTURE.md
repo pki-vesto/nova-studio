@@ -163,7 +163,7 @@ API's: `GET/POST /api/products`, `PUT/DELETE /api/products/:id`, `/:id/variants`
 
 ### Design Library
 
-Verantwoordelijkheden: herbruikbare concepten, room-templates, product-/materiaalsets en proposal-snippets (`kind`, `data_json`, `tags`, beeld, herkomst-project), met **promote** vanuit moodboard en product-/materiaalset-promotie vanuit het actieve project. Projecttemplates (`is_template`/`template_name`) blijven los hiervan bestaan.
+Verantwoordelijkheden: herbruikbare concepten, room-templates, product-/materiaalsets en proposal-snippets (`kind`, `data_json`, `tags`, beeld, herkomst-project), met **promote** vanuit moodboard en room-template-, productset- en materiaalset-promotie vanuit het actieve project. Projecttemplates (`is_template`/`template_name`) blijven los hiervan bestaan.
 
 Datamodellen: `design_library`.
 

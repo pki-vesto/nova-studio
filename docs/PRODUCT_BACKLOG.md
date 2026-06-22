@@ -185,7 +185,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 157. [Completed] Materiaal duurzaamheidsscore opslaan.
 158. [Completed] Materiaal monsterstatus opslaan.
 159. [Completed] Design Library concepten toevoegen.
-160. [Partial] Design Library room templates toevoegen. (kind ondersteund; geen dedicated room-template-flow)
+160. [Completed] Design Library room templates toevoegen. (actieve projectruimte opslaan als `room_template`)
 161. [Completed] Design Library productsets toevoegen. (actieve projectshopping opslaan als `product_set`)
 162. [Completed] Design Library materiaalsets toevoegen. (actieve projectmaterialen opslaan als `material_set`)
 163. [Completed] Design Library proposal snippets toevoegen. (direct invoegen als proposal-sectie)

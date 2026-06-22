@@ -64,6 +64,7 @@ export function DesignLibraryScreen({ ctx }) {
   const [kind, setKind] = useState("Alle");
   const [loadError, setLoadError] = useState("");
   const [drawer, setDrawer] = useState(null); // null | {} | item
+  const [roomId, setRoomId] = useState("");
   const [promoting, setPromoting] = useState("");
 
   const load = useCallback(async () => {
@@ -87,6 +88,38 @@ export function DesignLibraryScreen({ ctx }) {
     try { await api.del(`/api/design-library/${id}`); await load(); }
     catch (err) { ctx.fail(err); }
   }
+  async function saveRoomTemplate() {
+    const room = (ctx.project?.rooms || []).find((r) => r.id === roomId);
+    if (!room) return;
+    setPromoting("room_template");
+    try {
+      await api.json("/api/design-library/promote", "POST", {
+        kind: "room_template",
+        title: room.name,
+        summary: [room.room_type, room.floor_level, room.dimensions].filter(Boolean).join(" · "),
+        body: room.concept || room.designer_notes || "",
+        tags: [room.room_type, room.floor_level].filter(Boolean).join(", "),
+        source_project_id: ctx.project.id,
+        data: {
+          room: {
+            name: room.name,
+            room_type: room.room_type || "",
+            floor_level: room.floor_level || "",
+            dimensions: room.dimensions || "",
+            orientation: room.orientation || "",
+            daylight: room.daylight || "",
+            color_notes: room.color_notes || "",
+            designer_notes: room.designer_notes || "",
+            concept: room.concept || ""
+          }
+        }
+      });
+      setRoomId("");
+      await load();
+    } catch (err) { ctx.fail(err); }
+    finally { setPromoting(""); }
+  }
+
   async function saveCurrentSet(kind) {
     if (!ctx.project) return;
     const productItems = ctx.shopping?.items || [];
@@ -138,6 +171,7 @@ export function DesignLibraryScreen({ ctx }) {
     finally { setPromoting(""); }
   }
 
+  const rooms = ctx.project?.rooms || [];
   const productCount = ctx.shopping?.items?.length || 0;
   const materialCount = ctx.project?.materials?.length || 0;
 
@@ -156,6 +190,26 @@ export function DesignLibraryScreen({ ctx }) {
         />
       ) : (
         <>
+          {ctx.project && rooms.length > 0 && (
+            <div className="card" style={{ padding: "18px 20px", marginBottom: 28 }}>
+              <div className="row between middle wrap" style={{ gap: 14 }}>
+                <div>
+                  <Kicker style={{ marginBottom: 6 }}>Uit huidig project</Kicker>
+                  <div className="body" style={{ fontSize: 14, margin: 0 }}>Bewaar een ruimte als herbruikbare ruimte-template.</div>
+                </div>
+                <div className="row gap2 wrap">
+                  <select value={roomId} onChange={(e) => setRoomId(e.target.value)} style={{ width: 240 }}>
+                    <option value="">Kies ruimte...</option>
+                    {rooms.map((room) => <option key={room.id} value={room.id}>{room.name}</option>)}
+                  </select>
+                  <button className="btn btn-clay" onClick={saveRoomTemplate} disabled={!roomId || !!promoting}>
+                    <Icon name="download" size={14} /> {promoting === "room_template" ? "Opslaan..." : "Template opslaan"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {ctx.project && (productCount > 0 || materialCount > 0) && (
             <div className="card" style={{ padding: "18px 20px", marginBottom: 28 }}>
               <div className="row between middle wrap" style={{ gap: 14 }}>
