@@ -23,6 +23,28 @@ function scaleCaption(fp) {
   const unit = fp.scale_unit ? ` (${fp.scale_unit})` : "";
   return `Schaal 1:${fp.scale_ratio}${unit}`;
 }
+function distanceLabel(line) {
+  if (line?.label) return line.label;
+  const dx = Number(line?.x2 || 0) - Number(line?.x1 || 0);
+  const dy = Number(line?.y2 || 0) - Number(line?.y1 || 0);
+  return `${Math.round(Math.sqrt(dx * dx + dy * dy))} px`;
+}
+function renderDimensions(dimensions = []) {
+  return dimensions.map((line, i) => {
+    const midX = (Number(line.x1 || 0) + Number(line.x2 || 0)) / 2;
+    const midY = (Number(line.y1 || 0) + Number(line.y2 || 0)) / 2;
+    return (
+      <g key={i}>
+        <line x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} />
+        <circle cx={line.x1} cy={line.y1} r="4" fill="#7c563c" />
+        <circle cx={line.x2} cy={line.y2} r="4" fill="#7c563c" />
+        <text x={midX} y={midY - 8} textAnchor="middle" fill="#7c563c" fontSize="14" fontWeight="700" paintOrder="stroke" stroke="var(--surface-2)" strokeWidth="4">
+          {distanceLabel(line)}
+        </text>
+      </g>
+    );
+  });
+}
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -136,6 +158,7 @@ function PlanDrawer({ ctx, onClose }) {
   const [drawing, setDrawing] = useState(EMPTY_DRAWING);
   const [draft, setDraft] = useState(null);
   const [tool, setTool] = useState("walls");
+  const [dimensionLabel, setDimensionLabel] = useState("");
   const [meta, setMeta] = useState({ name: "Concept plattegrond", floor_level: "" });
   const [file, setFile] = useState(null);
   const svgRef = useRef(null);
@@ -149,7 +172,14 @@ function PlanDrawer({ ctx, onClose }) {
     const p = point(e);
     if (tool === "objects") { setDrawing((d) => ({ ...d, objects: [...d.objects, { x: p.x, y: p.y, w: 54, h: 34 }] })); return; }
     if (!draft) setDraft(p);
-    else { setDrawing((d) => ({ ...d, [tool]: [...d[tool], { x1: draft.x, y1: draft.y, x2: p.x, y2: p.y }] })); setDraft(null); }
+    else {
+      const line = { x1: draft.x, y1: draft.y, x2: p.x, y2: p.y };
+      setDrawing((d) => ({
+        ...d,
+        [tool]: [...d[tool], tool === "dimensions" ? { ...line, label: dimensionLabel.trim() || distanceLabel(line) } : line]
+      }));
+      setDraft(null);
+    }
   }
   function undo() { setDrawing((d) => ({ ...d, [tool]: d[tool].slice(0, -1) })); }
 
@@ -182,14 +212,22 @@ function PlanDrawer({ ctx, onClose }) {
         <button type="button" className="btn btn-ghost" style={{ padding: "7px 11px" }} onClick={undo}>Ongedaan</button>
         <button type="button" className="btn btn-ghost" style={{ padding: "7px 11px" }} onClick={() => setDrawing(EMPTY_DRAWING)}>Leeg</button>
       </div>
+      {tool === "dimensions" && (
+        <Field label="Maatlabel voor volgende maatlijn">
+          <input value={dimensionLabel} onChange={(e) => setDimensionLabel(e.target.value)} placeholder="Bijv. 320 cm of doorgang 900 mm" />
+        </Field>
+      )}
       <div className="card" style={{ overflow: "hidden", marginBottom: 12 }}>
         <svg ref={svgRef} viewBox="0 0 720 420" onClick={clickCanvas} style={{ display: "block", width: "100%", cursor: "crosshair" }}>
           <rect x="0" y="0" width="720" height="420" fill="var(--surface-2)" />
-          {["walls", "doors", "windows", "dimensions"].map((kind) => (
+          {["walls", "doors", "windows"].map((kind) => (
             <g key={kind} stroke={STROKES[kind][0]} strokeWidth={STROKES[kind][1]} strokeLinecap="round" strokeDasharray={kind === "dimensions" ? "8 6" : undefined}>
               {drawing[kind].map((l, i) => <line key={i} {...l} />)}
             </g>
           ))}
+          <g stroke={STROKES.dimensions[0]} strokeWidth={STROKES.dimensions[1]} strokeLinecap="round" strokeDasharray="8 6">
+            {renderDimensions(drawing.dimensions)}
+          </g>
           {drawing.objects.map((o, i) => <rect key={i} x={o.x} y={o.y} width={o.w} height={o.h} rx="4" fill="#e8ded3" stroke="#a47755" />)}
           {draft && <circle cx={draft.x} cy={draft.y} r="6" fill="var(--clay)" />}
         </svg>
@@ -248,13 +286,14 @@ function PlanVisual({ plan }) {
     return <Ph label="" src={plan.file_path} icon="plan" style={{ aspectRatio: "16/11" }} alt={plan.name} />;
   }
   const d = plan?.drawing;
-  const hasDrawing = d && (d.walls?.length || d.doors?.length || d.windows?.length);
+  const hasDrawing = d && (d.walls?.length || d.doors?.length || d.windows?.length || d.dimensions?.length);
   if (hasDrawing) {
     return (
       <svg viewBox="0 0 720 420" style={{ display: "block", width: "100%", aspectRatio: "16/11", background: "var(--surface-2)" }}>
         <g stroke="#2d2926" strokeWidth="5" strokeLinecap="round">{(d.walls || []).map((l, i) => <line key={i} {...l} />)}</g>
         <g stroke="#a47755" strokeWidth="4" strokeLinecap="round">{(d.doors || []).map((l, i) => <line key={i} {...l} />)}</g>
         <g stroke="#447c88" strokeWidth="4" strokeLinecap="round">{(d.windows || []).map((l, i) => <line key={i} {...l} />)}</g>
+        <g stroke="#7c563c" strokeWidth="2" strokeLinecap="round" strokeDasharray="8 6">{renderDimensions(d.dimensions || [])}</g>
         {(d.objects || []).map((o, i) => <rect key={i} x={o.x} y={o.y} width={o.w} height={o.h} rx="4" fill="#e8ded3" stroke="#a47755" />)}
       </svg>
     );

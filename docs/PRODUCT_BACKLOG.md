@@ -149,7 +149,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 121. [Completed] Moodboard klantfeedback registreren.
 122. [Completed] Moodboard promoted concepts naar Design Library.
 123. [Completed] Floorplan schaal instellen.
-124. [Partial] Floorplan maatlijnen opslaan. (objecten/geometrie aanwezig; geen dedicated maatlijn-tool)
+124. [Completed] Floorplan maatlijnen opslaan. (dedicated maatlijntool met labels in `drawing_json.dimensions`)
 125. [Partial] Floorplan objectenbibliotheek. (objecten per plattegrond; geen herbruikbare bibliotheek)
 126. [Completed] Floorplan laagmodel voor muren, meubels en annotaties.
 127. [Completed] Floorplan versiebeheer.
