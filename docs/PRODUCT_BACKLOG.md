@@ -153,7 +153,7 @@ Addendum (RBAC/ownership, 2026-06-10): `authorization.routeGate` enforceert 401/
 125. [Completed] Floorplan objectenbibliotheek. (herbruikbare presets schrijven naar `floorplan_objects.geometry_json`)
 126. [Completed] Floorplan laagmodel voor muren, meubels en annotaties.
 127. [Completed] Floorplan versiebeheer.
-128. [Partial] Floorplan annotaties per ruimte. (annotatie-laag; geen room-scoping per annotatie)
+128. [Completed] Floorplan annotaties per ruimte. (annotatie-objecten bewaren room-scope in `floorplan_objects.geometry_json.room_id`)
 129. [Completed] Floorplan PDF upload thumbnail. (server-side PDF-thumbnail met SVG-fallback)
 130. [Completed] Floorplan image crop/fit controls. (`drawing_json.image` fit/positie/zoom)
 131. [Completed] Product inkoopprijs toevoegen.
