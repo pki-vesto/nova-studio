@@ -237,6 +237,13 @@ test("project to proposal flow renders the proposal document and opens presentat
   await waitFor(() => state.calls.includes("GET /api/projects/smoke-project"), `created project detail load; calls=${state.calls.join(" | ")}`);
   await waitFor(() => byText(document, "Smoke Suite"), "opened project title");
 
+  await React.act(async () => click(document.querySelector("button[title^=\"Commando\"]")));
+  await waitFor(() => byText(document, "Schermen"), "grouped command palette");
+  assert.ok(byText(document, "Projecttabs"), "command palette groups project tabs");
+  assert.ok(byText(document, "Projecten"), "command palette groups projects");
+  await React.act(async () => document.querySelector(".scrim input")?.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  await waitFor(() => !byText(document, "Schermen"), "closed command palette");
+
   await React.act(async () => click(byText(document, "Projecten", ".nav-item")));
   await waitFor(() => byText(document, "Projectlevenscyclus"), "project status model panel");
   assert.ok(byText(document, "Klant heeft akkoord gegeven; planning en inkoop kunnen starten."), "status model explains approved state");
