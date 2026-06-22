@@ -29,7 +29,7 @@ function fileFilter(_req, file, cb) {
   return cb(err);
 }
 
-const upload = multer({ storage, fileFilter, limits: { fileSize: 25 * 1024 * 1024 } });
+const upload = multer({ storage, fileFilter, preservePath: true, limits: { fileSize: 25 * 1024 * 1024 } });
 const router = express.Router();
 
 // Best-effort removal of an uploaded file. Confined to uploadDir via basename
