@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
-import { Ph, Kicker, Tag, EditButton, statusLabel } from "../components/primitives.jsx";
+import { Ph, Kicker, PROJECT_STATUS_MODEL, Tag, EditButton, statusLabel } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
 
 function MetaDrawer({ ctx, onClose }) {
@@ -53,7 +53,7 @@ function MetaDrawer({ ctx, onClose }) {
         <div className="form-grid form-grid-2">
           <Field label="Status">
             <select value={form.status} onChange={set("status")}>
-              {["lead", "proposal", "active", "approved", "completed", "archived"].map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
+              {PROJECT_STATUS_MODEL.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
           </Field>
           <Field label="Stijlrichting"><input value={form.style} onChange={set("style")} placeholder="Warm minimalisme" /></Field>
@@ -87,7 +87,7 @@ export function ProjectOverview({ ctx }) {
   return (
     <div className="content content-wide rise">
       {/* Hero */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.05fr .95fr", gap: 56, alignItems: "center", marginBottom: 72 }}>
+      <div className="project-overview-hero">
         <div>
           <div className="row gap2 middle wrap" style={{ marginBottom: 22 }}>
             <Tag variant="clay">{statusLabel(p.status)}</Tag>
@@ -109,7 +109,7 @@ export function ProjectOverview({ ctx }) {
       {/* Specs strip */}
       {specs.length > 0 && (
         <div className="card" style={{ padding: "8px 36px", marginBottom: 64 }}>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${specs.length},1fr)`, gap: 24 }}>
+          <div className="project-spec-grid" style={{ gridTemplateColumns: `repeat(${specs.length},1fr)` }}>
             {specs.map(([k, v]) => (
               <div key={k} style={{ padding: "22px 0" }}>
                 <div className="eyebrow" style={{ marginBottom: 8 }}>{k}</div>
@@ -121,7 +121,7 @@ export function ProjectOverview({ ctx }) {
       )}
 
       {/* Two-col: visie + doelen */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64 }}>
+      <div className="project-overview-columns">
         <div>
           <Kicker style={{ marginBottom: 16 }}>Ontwerpvisie</Kicker>
           <p className="body" style={{ fontSize: 17 }}>{p.summary || "Nog geen samenvatting — voeg de opdracht en stijlrichting toe via Bewerk."}</p>

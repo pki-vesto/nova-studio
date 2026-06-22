@@ -53,6 +53,7 @@ function jsonResponse(body, init = {}) {
 function createApiStub() {
   const state = {
     projects: [],
+    templates: [],
     createdProject: null,
     calls: [],
   };
@@ -108,17 +109,36 @@ function createApiStub() {
 
     if (method === "GET" && path === "/api/auth/status") return jsonResponse({ hasUsers: false, user: null });
     if (method === "GET" && path === "/api/projects?status=") return jsonResponse(state.projects);
+    if (method === "GET" && path === "/api/projects?status=&templates=1") return jsonResponse(state.templates);
     if (method === "GET" && path === "/api/clients") return jsonResponse([]);
     if (method === "GET" && path === "/api/products") return jsonResponse([]);
     if (method === "GET" && path === "/api/notifications/count") return jsonResponse({ unread: 0 });
 
     if (method === "POST" && path === "/api/projects") {
       const body = JSON.parse(init.body || "{}");
+      if (Number(body.is_template || 0) === 1) {
+        const template = {
+          ...detail,
+          id: "template-project",
+          title: body.title,
+          client_name: "",
+          address: body.address || "",
+          is_template: 1,
+          template_name: body.template_name || body.title,
+        };
+        state.templates = [template];
+        return jsonResponse({ id: template.id });
+      }
       state.createdProject = { ...detail, title: body.title, client_name: body.clientName || "Familie Test", address: body.address };
       state.projects = [state.createdProject];
       return jsonResponse({ id: state.createdProject.id });
     }
 
+    if (method === "GET" && path === "/api/projects/template-project") return jsonResponse(state.templates[0]);
+    if (method === "GET" && path === "/api/floorplans/project/template-project") return jsonResponse([]);
+    if (method === "GET" && path === "/api/moodboards/project/template-project") return jsonResponse([]);
+    if (method === "GET" && path === "/api/products/shopping-list/template-project") return jsonResponse({ total: 0, items: [] });
+    if (method === "GET" && path === "/api/proposals/project/template-project") return jsonResponse([]);
     if (method === "GET" && path === "/api/projects/smoke-project") return jsonResponse(state.createdProject || detail);
     if (method === "GET" && path === "/api/floorplans/project/smoke-project") return jsonResponse([]);
     if (method === "GET" && path === "/api/moodboards/project/smoke-project") return jsonResponse([{ id: "board-1", assets: [] }]);
@@ -191,6 +211,20 @@ test("project to proposal flow renders the proposal document and opens presentat
 
   await waitFor(() => byText(document, "Nog geen projecten"), "empty projects state");
 
+  await React.act(async () => click(byText(document, "Templates", "button")));
+  await waitFor(() => byText(document, "Nog geen projecttemplates"), "empty templates state");
+  await React.act(async () => click(byText(document, "Nieuw template", "button")));
+  const templateInput = await waitFor(() => document.querySelector("input[placeholder='Stadsappartement basispakket']"), "new template title input");
+  await React.act(async () => {
+    setInputValue(templateInput, "Smoke Template");
+    setInputValue(document.querySelector("input[placeholder='Basis intake + voorstelstructuur']"), "Basis smoke-template");
+  });
+  await React.act(async () => click(byText(document, "Template aanmaken", "button")));
+  await waitFor(() => state.calls.includes("GET /api/projects/template-project"), `created template detail load; calls=${state.calls.join(" | ")}`);
+  await waitFor(() => byText(document, "Smoke Template"), "opened template detail");
+  await React.act(async () => click(byText(document, "Projecten", ".nav-item")));
+  await waitFor(() => byText(document, "Nog geen projecten"), "returned to project list");
+
   await React.act(async () => click(byText(document, "Nieuw project", "button")));
   const titleInput = await waitFor(() => document.querySelector("input[placeholder='Herenhuis aan de Keizersgracht']"), "new project title input");
   await React.act(async () => {
@@ -209,6 +243,13 @@ test("project to proposal flow renders the proposal document and opens presentat
   assert.ok(byText(document, "Projecten"), "command palette groups projects");
   await React.act(async () => document.querySelector(".scrim input")?.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   await waitFor(() => !byText(document, "Schermen"), "closed command palette");
+
+  await React.act(async () => click(byText(document, "Projecten", ".nav-item")));
+  await waitFor(() => byText(document, "Projectlevenscyclus"), "project status model panel");
+  assert.ok(byText(document, "Klant heeft akkoord gegeven; planning en inkoop kunnen starten."), "status model explains approved state");
+
+  await React.act(async () => click(byText(document, "Smoke Suite", "h3")));
+  await waitFor(() => byText(document, "Presenteer voorstel", "button"), "reopened project detail");
 
   await React.act(async () => click(byText(document, "Voorstel", ".proj-tab")));
   await waitFor(() => byText(document, "Voorstel — bladerbaar document"), "proposal tab");

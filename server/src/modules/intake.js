@@ -16,6 +16,20 @@ const fields = [
   "free_notes",
   "ai_summary"
 ];
+const questionnaireKeys = [
+  "household",
+  "room_use",
+  "wishes",
+  "style_preferences",
+  "color_preferences",
+  "budget_indication",
+  "existing_furniture",
+  "constraints",
+  "free_notes",
+  "scope_estimate",
+  "risks",
+  "followups"
+];
 
 const intakeSchema = z.object({
   household: z.string().optional(),
@@ -32,6 +46,17 @@ const intakeSchema = z.object({
   risks: z.array(z.any()).optional(),
   followups: z.array(z.any()).optional()
 });
+const questionSchema = z.object({
+  key: z.enum(questionnaireKeys),
+  label: z.string().optional(),
+  placeholder: z.string().optional(),
+  input_type: z.enum(["input", "textarea", "list"]).optional(),
+  sort_order: z.coerce.number().int().optional(),
+  is_enabled: z.coerce.boolean().optional()
+});
+const questionnaireSchema = z.object({
+  questions: z.array(questionSchema)
+});
 
 function hydrate(row) {
   if (!row) return null;
@@ -41,6 +66,45 @@ function hydrate(row) {
     followups: parseJson(row.followups_json, [])
   };
 }
+
+function questionnaireRows() {
+  return db.prepare(`
+    SELECT key, label, placeholder, input_type, sort_order, is_enabled
+    FROM intake_questionnaire
+    ORDER BY sort_order, key
+  `).all().map((row) => ({ ...row, is_enabled: !!row.is_enabled }));
+}
+
+router.get("/questionnaire", (_req, res) => {
+  res.json(questionnaireRows());
+});
+
+router.put("/questionnaire", validateBody(questionnaireSchema), (req, res) => {
+  const update = db.prepare(`
+    UPDATE intake_questionnaire SET
+      label = @label,
+      placeholder = @placeholder,
+      input_type = @input_type,
+      sort_order = @sort_order,
+      is_enabled = @is_enabled,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE key = @key
+  `);
+  const save = db.transaction((rows) => {
+    rows.forEach((row, index) => {
+      update.run({
+        key: row.key,
+        label: row.label || row.key,
+        placeholder: row.placeholder || "",
+        input_type: row.input_type || "textarea",
+        sort_order: row.sort_order ?? index * 10,
+        is_enabled: row.is_enabled === false ? 0 : 1
+      });
+    });
+  });
+  save(req.body.questions);
+  res.json(questionnaireRows());
+});
 
 router.get("/:projectId", (req, res) => {
   const row = db.prepare("SELECT * FROM intake WHERE project_id = ?").get(req.params.projectId);
