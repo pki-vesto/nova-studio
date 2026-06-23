@@ -3,6 +3,7 @@ import { api } from "../lib/api.js";
 import { Icon } from "../lib/icons.jsx";
 import { SectionHead, Kicker } from "../components/primitives.jsx";
 import { EditDrawer, Field } from "../components/EditDrawer.jsx";
+import { LessonDrawer, LessonList } from "./Lessons.jsx";
 
 // Compact Dutch date — e.g. "9 jun 2026". Falls back to the raw value.
 function fmtDate(value) {
@@ -35,11 +36,13 @@ export function PlanningScreen({ ctx }) {
   const [milestones, setMilestones] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [timeline, setTimeline] = useState([]);
+  const [lessons, setLessons] = useState([]);
 
   // Inline add forms.
   const [newTask, setNewTask] = useState({ title: "", due_date: "" });
   const [newMilestone, setNewMilestone] = useState({ title: "", target_date: "" });
   const [docOpen, setDocOpen] = useState(false);
+  const [lessonDrawer, setLessonDrawer] = useState(null);
 
   async function loadTimeline() {
     try { setTimeline(await api.get(`/api/planning/timeline/project/${pid}`)); } catch (err) { fail(err); }
@@ -59,12 +62,16 @@ export function PlanningScreen({ ctx }) {
   async function loadDocuments() {
     try { setDocuments(await api.get(`/api/planning/documents/project/${pid}`)); } catch (err) { fail(err); }
   }
+  async function loadLessons() {
+    try { setLessons(await api.get(`/api/lessons?project_id=${encodeURIComponent(pid)}`)); } catch (err) { fail(err); }
+  }
 
   useEffect(() => {
     if (!pid) return;
     loadTasks();
     loadMilestones();
     loadDocuments();
+    loadLessons();
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [pid]);
 
@@ -237,6 +244,15 @@ export function PlanningScreen({ ctx }) {
 
       <hr className="hr" style={{ margin: "56px 0 40px" }} />
 
+      {/* ---- Lessen ---- */}
+      <SectionHead kicker="Retrospective" title="Lessen"
+        sub="Leg vast wat werkte, wat misliep en wat opnieuw bruikbaar is."
+        right={<button className="btn btn-clay" onClick={() => setLessonDrawer({})}><Icon name="plus" size={15} /> Les toevoegen</button>} />
+      <LessonList lessons={lessons} onEdit={setLessonDrawer}
+        emptyAction={<button className="btn btn-clay" onClick={() => setLessonDrawer({})}><Icon name="plus" size={15} /> Eerste les</button>} />
+
+      <hr className="hr" style={{ margin: "56px 0 40px" }} />
+
       {/* ---- Documenten ---- */}
       <SectionHead kicker="Dossier" title="Documenten"
         sub="Contracten, facturen en overige bestanden bij dit project."
@@ -266,6 +282,7 @@ export function PlanningScreen({ ctx }) {
       )}
 
       {docOpen && <DocumentDrawer ctx={ctx} onClose={() => setDocOpen(false)} onSaved={loadDocuments} />}
+      {lessonDrawer && <LessonDrawer lesson={lessonDrawer.id ? lessonDrawer : null} projectId={pid} onClose={() => setLessonDrawer(null)} onSaved={loadLessons} fail={fail} />}
     </div>
   );
 }
