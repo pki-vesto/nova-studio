@@ -81,6 +81,7 @@ Geregistreerd in `schema_migrations` als **`2026-06-09-platform-expansion`**.
 - `project_tasks` — taken per project/ruimte (status, due-date, koppeling aan voorstelstatus).
 - `project_milestones` — mijlpalen (target-datum, done).
 - `project_documents` — documenten per project (kind, bestand).
+- `project_lessons` — herbruikbare projectlessen/retrospectives per project met categorie, sentiment en `tags_json`, cross-project doorzoekbaar via API. Toegevoegd additief en idempotent op 2026-06-23.
 
 **Client portal**
 - `portal_access` — magic-link tokens per project (optioneel aan een proposal, verloop, intrekken).
