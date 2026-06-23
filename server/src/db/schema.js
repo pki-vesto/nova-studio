@@ -548,6 +548,19 @@ function migrate() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS project_lessons (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      category TEXT NOT NULL DEFAULT 'overig' CHECK (category IN ('proces','leverancier','materiaal','product','budget','klant','overig')),
+      title TEXT NOT NULL,
+      body TEXT DEFAULT '',
+      sentiment TEXT NOT NULL DEFAULT 'neutraal' CHECK (sentiment IN ('positief','negatief','neutraal')),
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_lessons_project ON project_lessons(project_id);
+    CREATE INDEX IF NOT EXISTS idx_project_lessons_category ON project_lessons(category);
+
     -- Client portal: magic-link access + per-section/item feedback + activity log.
     CREATE TABLE IF NOT EXISTS portal_access (
       token TEXT PRIMARY KEY,

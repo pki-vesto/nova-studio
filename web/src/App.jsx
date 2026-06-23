@@ -21,6 +21,7 @@ import { Suppliers } from "./screens/Suppliers.jsx";
 import { MaterialLibraryScreen } from "./screens/MaterialLibraryScreen.jsx";
 import { DesignLibraryScreen } from "./screens/DesignLibraryScreen.jsx";
 import { KnowledgeScreen } from "./screens/KnowledgeScreen.jsx";
+import { Lessons } from "./screens/Lessons.jsx";
 import { Settings } from "./screens/Settings.jsx";
 import { Login } from "./screens/Login.jsx";
 import { PortalView } from "./screens/PortalView.jsx";
@@ -37,6 +38,7 @@ const STUDIO_NAV = [
   { id: "library", label: "Productbibliotheek", icon: "library" },
   { id: "material-library", label: "Materiaalbibliotheek", icon: "layers" },
   { id: "design-library", label: "Design Library", icon: "editorial" },
+  { id: "lessons", label: "Lessen", icon: "history" },
   { id: "clients", label: "Klanten", icon: "clients" },
   { id: "suppliers", label: "Leveranciers", icon: "supplier" }
 ];
@@ -61,7 +63,7 @@ const PROJECT_TABS = [
 ];
 const VIEW_TITLES = {
   projects: "Projecten", library: "Productbibliotheek", "material-library": "Materiaalbibliotheek",
-  "design-library": "Design Library", clients: "Klanten", suppliers: "Leveranciers",
+  "design-library": "Design Library", lessons: "Lessen", clients: "Klanten", suppliers: "Leveranciers",
   stijlgids: "Stijlgids", knowledge: "Kennisgraaf", settings: "Instellingen"
 };
 
@@ -471,6 +473,7 @@ export default function App() {
   else if (view === "library") body = <Library ctx={ctx} />;
   else if (view === "material-library") body = <MaterialLibraryScreen ctx={ctx} />;
   else if (view === "design-library") body = <DesignLibraryScreen ctx={ctx} />;
+  else if (view === "lessons") body = <Lessons ctx={ctx} />;
   else if (view === "clients") body = <Clients ctx={ctx} />;
   else if (view === "suppliers") body = <Suppliers ctx={ctx} />;
   else if (view === "stijlgids") body = <Stijlgids ctx={ctx} />;
